@@ -78,7 +78,7 @@ import {
 import { generateRandomNumber } from "../utils/utils";
 import { ContractCalls } from "./exchange/contractService";
 import { ResponseSchema } from "./exchange/contractErrorHandling.service";
-import { OnboardingSigner } from "./exchange/onBoardSigner";
+import { OnboardingSigner } from "../submodules/library-sui/src/classes/onBoardSigner";
 
 // import { Contract } from "ethers";
 
