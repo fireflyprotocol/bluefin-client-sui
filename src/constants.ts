@@ -23,17 +23,17 @@ export const Networks = {
   },
   LOCAL_SUI: {
     name: "local",
-    rpc: "http://localhost:8545",
+    rpc: "http://127.0.0.1:9000",
     apiGateway: "https://dapi.api.arbitrum-staging.firefly.exchange",
     dmsURL: "https://api.arbitrum-staging.firefly.exchange/dead-man-switch",
     socketURL: "wss://dapi.api.arbitrum-staging.firefly.exchange",
     webSocketURL: "wss://notifications.api.arbitrum-staging.firefly.exchange/",
     onboardingUrl: "https://testnet.firefly.exchange",
-    faucet: "http://localhost:3005",
+    faucet: "http://localhost:5003",
   },
 };
 
-export const DEFAULT_PRECISION = 2;
+export const DEFAULT_PRECISION = 6;
 export const SUI_NETWROK = "sui";
 
 export const EXTRA_FEES = 10000;

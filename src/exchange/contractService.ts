@@ -4,6 +4,7 @@ import {
   FactoryName,
   mapContract,
   NETWORK_NAME,
+  toBigNumber,
   toBigNumberStr,
 } from "@firefly-exchange/library";
 
@@ -12,6 +13,8 @@ import { DEFAULT_PRECISION, EXTRA_FEES } from "../constants";
 import { SuccessMessages, TransformToResponseSchema } from "./contractErrorHandling.service";
 //@ts-ignore
 import { default as interpolate } from "interpolate";
+import { OnChainCalls } from "../../submodules/library-sui/src";
+import { RawSigner, SignerWithProvider, SuiTransactionBlockResponse } from "@mysten/sui.js";
 
 export const adjustLeverageContractCall = async (
   perpContract: any,
@@ -116,111 +119,59 @@ export const adjustMarginContractCall = async (
 };
 
 export const withdrawFromMarginBankContractCall = async (
-  marginBankContract: any,
-  MarginTokenPrecision: number,
-  wallet: Signer | Wallet,
-  gasLimit: number,
-  networkName: string,
-  getMarginBankBalance: (address: string) => Promise<number>,
-  getPublicAddress: () => address,
-  amount?: number
-) => {
-
-  let amountNumber = amount;
-  return TransformToResponseSchema(async () => {
-    const mbContract = mapContract(networkName, FactoryName.marginBank, marginBankContract)
-
-    if (!amount) {
-      // get all margin bank balance when amount not provided by user
-      amountNumber = await getMarginBankBalance((mbContract).address);
-    }
-
-    const amountString = toBigNumberStr(amountNumber!, MarginTokenPrecision);
-    const contract = mbContract.connect(wallet)
-  
-    //estimate gas in case of ARBITRUM network because it doesn't work on max block gas limit
-    if (networkName == NETWORK_NAME.arbitrum) {
-      gasLimit = (+await contract.estimateGas.withdrawFromBank(getPublicAddress(), amountString)) + EXTRA_FEES;    
-    }
-
-    return (
-      await contract.withdrawFromBank(
-        getPublicAddress(), 
-        amountString, {
-        gasLimit: gasLimit,
-        })
-    ).wait();
-  }, interpolate(SuccessMessages.withdrawMargin, {amount: amountNumber?.toFixed(DEFAULT_PRECISION)}));
+  amount: Number,
+  contractCalls:OnChainCalls,
+  signer:RawSigner,
+):Promise<SuiTransactionBlockResponse> => {
+  return await contractCalls.withdrawFromBank(
+    {
+      amount: amount.toString(),
+    },
+    signer
+  );
 };
 
-export const approvalFromUSDCContractCall = async (
-  tokenContract: any,
-  marginBankContract: any,
-  amount: number,
-  MarginTokenPrecision: number,
-  wallet: Signer | Wallet,
-  gasLimit: number,
-  networkName: string,
-) => {
-  const amountString = toBigNumberStr(amount, MarginTokenPrecision);
-  const contract = (tokenContract as Contract).connect(wallet)
-  const mbContract = mapContract(networkName, FactoryName.marginBank, marginBankContract)
+// export const approvalFromUSDCContractCall = async (
+//   tokenContract: any,
+//   marginBankContract: any,
+//   amount: number,
+//   MarginTokenPrecision: number,
+//   wallet: Signer | Wallet,
+//   gasLimit: number,
+//   networkName: string,
+// ) => {
+//   const amountString = toBigNumberStr(amount, MarginTokenPrecision);
+//   const contract = (tokenContract as Contract).connect(wallet)
+//   const mbContract = mapContract(networkName, FactoryName.marginBank, marginBankContract)
 
-  //estimate gas in case of ARBITRUM network because it doesn't work on max block gas limit
-  if (networkName == NETWORK_NAME.arbitrum) {
-    gasLimit = (+await contract.estimateGas.approve((mbContract).address, amountString)) + EXTRA_FEES;    
-  }
+//   //estimate gas in case of ARBITRUM network because it doesn't work on max block gas limit
+//   if (networkName == NETWORK_NAME.arbitrum) {
+//     gasLimit = (+await contract.estimateGas.approve((mbContract).address, amountString)) + EXTRA_FEES;    
+//   }
 
-  return TransformToResponseSchema(async () => {
-    return await(
-      await contract
-        .approve(
-          (mbContract).address,
-          amountString,
-          { gasLimit: gasLimit }
-        )
-    ).wait();
-  }, interpolate(SuccessMessages.approveUSDC, {amount: amount.toFixed(DEFAULT_PRECISION)}));
-};
+//   return TransformToResponseSchema(async () => {
+//     return await(
+//       await contract
+//         .approve(
+//           (mbContract).address,
+//           amountString,
+//           { gasLimit: gasLimit }
+//         )
+//     ).wait();
+//   }, interpolate(SuccessMessages.approveUSDC, {amount: amount.toFixed(DEFAULT_PRECISION)}));
+// };
 
 export const depositToMarginBankContractCall = async (
-  tokenContract: any,
-  marginBankContract: any,
   amount: number,
-  MarginTokenPrecision: number,
-  wallet: Signer | Wallet,
-  gasLimit: number,
-  networkName: string,
-  getPublicAddress: () => address
-) => {
-  const amountString = toBigNumberStr(amount, MarginTokenPrecision);
-
-  return TransformToResponseSchema(async () => {
-    if (wallet instanceof Wallet) {
-      await approvalFromUSDCContractCall(
-        tokenContract,
-        marginBankContract,
-        amount,
-        MarginTokenPrecision,
-        wallet,
-        gasLimit,
-        networkName
-      );
-    }  
-    
-    const contract = mapContract(networkName, FactoryName.marginBank, marginBankContract).connect(wallet)
-
-    //estimate gas in case of ARBITRUM network because it doesn't work on max block gas limit
-    if (networkName == NETWORK_NAME.arbitrum) {
-      gasLimit = (+await contract.estimateGas.depositToBank(getPublicAddress(), amountString)) + EXTRA_FEES;
-    }
-
-    // deposit `amount` usdc to margin bank
-    return (
-      await contract
-        .depositToBank(getPublicAddress(), amountString, {
-          gasLimit: gasLimit,
-        })
-    ).wait();
-  }, interpolate(SuccessMessages.depositToBank, {amount: amount.toFixed(DEFAULT_PRECISION)}));
+  coinID: string,
+  contractCalls:OnChainCalls,
+  signer:RawSigner,  
+): Promise<SuiTransactionBlockResponse> => {
+  return await contractCalls.depositToBank(
+    {
+      amount: amount.toString(),
+      coinID: coinID
+    },
+    signer
+  );
 };

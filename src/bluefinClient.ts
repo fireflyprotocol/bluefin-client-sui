@@ -31,9 +31,12 @@ import {
   // FactoryName,
   // getFactory,
   toBigNumberStr,
+  toBigNumber,
+  bigNumber,
   // isStopOrder,
 } from "@firefly-exchange/library";
 import {
+  OrderSignatureRequest,
   // adjustLeverageRequest,
   // AdjustLeverageResponse,
   // AuthorizeHashResponse,
@@ -68,6 +71,7 @@ import {
   // OrderSignatureResponse,
   PlaceOrderRequest,
   PlaceOrderResponse,
+  PostOrderRequest,
   // PostOrderRequest,
   // PostTimerAttributes,
   // PostTimerResponse,
@@ -110,8 +114,12 @@ import {
   RawSigner,
   Secp256k1Keypair,
   SignatureScheme,
+  SignerWithProvider,
 } from "@mysten/sui.js";
-import { KEYPAIR_SCHEME } from "../submodules/library-sui/src/enums";
+import { OnChainCalls, Order } from "../submodules/library-sui/src";
+import { ADDRESSES } from "../submodules/library-sui/src/library";
+import { ORDER_SIDE, ORDER_TYPE } from "../submodules/library-sui/src/enums";
+import { generateRandomNumber } from "../utils/utils";
 
 // import { Contract } from "ethers";
 
@@ -131,7 +139,7 @@ export class BluefinClient {
   private walletAddress = ""; // to save user's public address when connecting from UI
 
   private signer: RawSigner | undefined; // to save signer when connecting from UI
-
+  private contractCalls: OnChainCalls | undefined
   private provider: any | undefined; // to save raw web3 provider when connecting from UI
 
   // private signingMethod: SigningMethod = SigningMethod.MetaMaskLatest; // to save signing method when integrating on UI
@@ -140,7 +148,7 @@ export class BluefinClient {
 
   private isTermAccepted = false;
 
-  private networkName = NETWORK_NAME.sui; // arbitrum | boba | sui
+  // private networkName = NETWORK_NAME.sui; // arbitrum | boba | sui
 
   private maxBlockGasLimit = 0;
 
@@ -169,7 +177,7 @@ export class BluefinClient {
     _isTermAccepted: boolean,
     _network: ExtendedNetwork,
     _account?: string | Keypair | AwsKmsSigner,
-    _scheme?: KEYPAIR_SCHEME
+    _scheme?: any
   ) {
     this.network = _network;
     this.provider = new JsonRpcProvider(
@@ -179,7 +187,6 @@ export class BluefinClient {
     this.apiService = new APIService(this.network.apiGateway);
 
     this.sockets = new Sockets(this.network.socketURL);
-
     if (this.network.webSocketURL) {
       this.webSockets = new WebSockets(this.network.webSocketURL);
     }
@@ -216,8 +223,9 @@ export class BluefinClient {
    * @param keypair key pair for the account to be used for placing orders
    *
    */
-  initializeWithKeyPair = (keypair: Keypair): void => {
+  initializeWithKeyPair = async (keypair: Keypair): Promise<void> => {
     this.signer = new RawSigner(keypair, this.provider);
+    this.walletAddress = await this.signer.getAddress()
   };
 
   /**
@@ -225,15 +233,15 @@ export class BluefinClient {
    * @param seed seed for the account to be used for placing orders
    *
    */
-  initializeWithSeed = (seed: string, scheme: KEYPAIR_SCHEME): void => {
+  initializeWithSeed = async (seed: string, scheme: any): Promise<void> => {
     switch (scheme) {
-      case KEYPAIR_SCHEME.ED25519:
+      case "ED25519":
         this.signer = new RawSigner(
           Ed25519Keypair.deriveKeypair(seed),
           this.provider
         );
         break;
-      case KEYPAIR_SCHEME.Secp256k1:
+      case "Secp256k1":
         this.signer = new RawSigner(
           Secp256k1Keypair.deriveKeypair(seed),
           this.provider
@@ -242,33 +250,89 @@ export class BluefinClient {
       default:
         throw new Error("Provided scheme is invalid");
     }
+    this.walletAddress = await this.signer.getAddress()
   };
+
+  initContractCalls = async (deployment?:any) =>{
+    if(!this.signer){
+      throw Error("Signer not Initialized")
+    }
+    const _deployment = deployment | this.getDeploymentJson()
+    this.contractCalls = new OnChainCalls(this.getSignerWithProvider(),_deployment)
+  }
+
+  getDeploymentJson = ():any =>{
+    return {} // will be fteched from DAPI, may be stored in configs table 
+  }
+
+  getSigner = (): RawSigner => {
+    if (!this.signer) {
+      throw Error("Signer not initialized");
+    }
+    return this.signer;
+  };
+
+  getProvider = (): JsonRpcProvider => {
+    return this.provider;
+  };
+
+  getPublicAddress = (): string => {
+    if (!this.signer){
+      Error("Signer not initialized")
+    }
+    return this.walletAddress;
+  }
+
+  getSignerWithProvider = (): SignerWithProvider => {
+    if (!this.signer) {
+      throw Error("Signer not initialized");
+    }
+    return this.signer.connect(this.provider);
+  };
+
+  createOrderToSign = (params:PostOrderRequest,parentAddress?:string): Order => {
+    const expiration = new Date();
+    // MARKET ORDER - set expiration of 1 minute
+    if (params.orderType === ORDER_TYPE.MARKET) {
+      expiration.setMinutes(expiration.getMinutes() + 1);
+    }
+    // LIMIT ORDER - set expiration of 1 month
+    else {
+      expiration.setMonth(expiration.getMonth() + 1);
+    }
+
+    const salt =
+      params.salt && bigNumber(params.salt).lt(bigNumber(this.maxSaltLimit))
+        ? bigNumber(params.salt)
+        : bigNumber(generateRandomNumber(1_000));
+
+    return {
+      market:this.contractCalls.getPerpetualID(),
+      isBuy: params.side === ORDER_SIDE.BUY,
+      price: toBigNumber(params.price),
+      quantity: toBigNumber(params.quantity),
+      leverage: toBigNumber(params.leverage || 1),
+      maker: parentAddress
+        ? parentAddress
+        : this.getPublicAddress().toLocaleLowerCase(),
+      reduceOnly: params.reduceOnly || false,
+      expiration: bigNumber(
+        params.expiration || Math.floor(expiration.getTime() / 1000) // /1000 to convert time in seconds
+      ),
+      postOnly: params.postOnly || false,
+      salt,
+    };
+  } 
+
+  
+
 
   /**
    * initializes contract addresses & onboards user
    */
-  // init = async (userOnboarding: boolean = true) => {
-  //   // get contract addresses
-  //   // const addresses = await this.getContractAddresses();
-  //   // if (!addresses.ok) {
-  //   //   throw Error("Failed to fetch contract addresses");
-  //   // }
-
-  //   // this.contractAddresses = addresses.data;
-
-  //   // // onboard user if not onboarded
-  //   // if (userOnboarding) {
-  //   //   await this.userOnBoarding();
-  //   // }
-
-  //   // fetch gas limit
-  //   this.maxBlockGasLimit = 0;
-
-  //   // check if Network is arbitrum
-  //   this.networkName = this.network.rpc.includes(SUI_NETWROK)
-  //     ? NETWORK_NAME.arbitrum
-  //     : NETWORK_NAME.bobabeam;
-  // };
+  init = async (userOnboarding: boolean = true) => {
+    
+  };
 
   // setSubAccount = async (
   //   publicAddress: address,

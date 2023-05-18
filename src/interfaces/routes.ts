@@ -1,15 +1,14 @@
 import {
-  MarketSymbol,
   ORDER_STATUS,
   ORDER_SIDE,
   TIME_IN_FORCE,
   MARGIN_TYPE,
   ORDER_TYPE,
-  address,
   CANCEL_REASON,
+  MarketSymbol,
+  address,
   Interval,
-} from "@firefly-exchange/library";
-
+} from "../../submodules/library-sui/src/index";
 export interface GetTransactionHistoryRequest {
   symbol?: MarketSymbol; // will fetch orders of provided market
   pageSize?: number; // will get only provided number of orders must be <= 50
@@ -50,6 +49,7 @@ export interface RequiredOrderFields {
   side: ORDER_SIDE; // BUY/SELL
   orderType: ORDER_TYPE; // MARKET/LIMIT
   triggerPrice?: number; //optional, send triggerPrice for stop orders
+  postOnly: boolean; // true/false, default is true
 }
 
 export interface OrderSignatureRequest extends RequiredOrderFields {
@@ -71,13 +71,11 @@ export interface OrderSignatureResponse extends RequiredOrderFields {
 
 export interface PlaceOrderRequest extends OrderSignatureResponse {
   timeInForce?: TIME_IN_FORCE; // FOK/IOC/GTT by default all orders are GTT
-  postOnly?: boolean; // true/false, default is true
   clientId?: string;
 }
 
 export interface PostOrderRequest extends OrderSignatureRequest {
   timeInForce?: TIME_IN_FORCE;
-  postOnly?: boolean;
   clientId?: string;
 }
 
