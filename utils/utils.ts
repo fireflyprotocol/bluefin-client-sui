@@ -6,6 +6,7 @@ import {
   SignatureScheme,
   Ed25519Keypair,
 } from "@mysten/sui.js";
+import fs from "fs";
 
 /**
  * Generates random number
@@ -42,4 +43,10 @@ export function getSignerFromSeed(
   provider: JsonRpcProvider
 ): RawSigner {
   return getSignerFromKeyPair(getKeyPairFromSeed(seed), provider);
+}
+
+export function readFile(filePath: string): any {
+  return fs.existsSync(filePath)
+    ? JSON.parse(fs.readFileSync(filePath).toString())
+    : {};
 }
