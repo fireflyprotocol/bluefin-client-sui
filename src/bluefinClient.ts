@@ -7,10 +7,12 @@ import {
   toBigNumber,
   bigNumber,
   bnStrToBaseNumber,
+  toBaseNumber,
 } from "../submodules/library-sui/src/library";
 import {
   AdjustLeverageResponse,
   AuthorizeHashResponse,
+  CancelOrderResponse,
   ExchangeInfo,
   GetAccountDataResponse,
   GetCandleStickRequest,
@@ -35,6 +37,8 @@ import {
   MarketData,
   MarketMeta,
   MasterInfo,
+  OrderCancelSignatureRequest,
+  OrderCancellationRequest,
   OrderSignatureRequest,
   OrderSignatureResponse,
   PlaceOrderRequest,
@@ -72,14 +76,14 @@ import {
   ADJUST_MARGIN,
   MARGIN_TYPE,
   ORDER_SIDE,
+  ORDER_STATUS,
   ORDER_TYPE,
   TIME_IN_FORCE,
 } from "../submodules/library-sui/src/enums";
-import { generateRandomNumber } from "../utils/utils";
+import { generateRandomNumber, readFile } from "../utils/utils";
 import { ContractCalls } from "./exchange/contractService";
 import { ResponseSchema } from "./exchange/contractErrorHandling.service";
 import { OnboardingSigner } from "../submodules/library-sui/src/classes/onBoardSigner";
-import { createOrder } from "../submodules/library-sui/src/utils";
 
 // import { Contract } from "ethers";
 
@@ -107,7 +111,7 @@ export class BluefinClient {
 
   // the number of decimals supported by USDC contract
   private MarginTokenPrecision = 6;
-  contractAddresses: any;
+  contractAddresses: Map<string, string>;
 
   /**
    * initializes the class instance
@@ -151,7 +155,16 @@ export class BluefinClient {
   /**
    * onboards user
    */
-  init = async (userOnboarding: boolean = true) => {};
+  init = async (userOnboarding: boolean = true) => {
+    if (!this.signer) {
+      throw Error("Signer not initialized");
+    }
+    await this.initContractCalls();
+    this.walletAddress = await this.signer.getAddress();
+    if (userOnboarding) {
+      // await this.userOnBoarding(); // uncomment once DAPI-SUI is up
+    }
+  };
 
   initializeWithKMS = async (awsKmsSigner: AwsKmsSigner): Promise<void> => {
     try {
@@ -180,7 +193,7 @@ export class BluefinClient {
    * @param seed seed for the account to be used for placing orders
    * @param scheme signature scheme to be used
    */
-  initializeWithSeed = async (seed: string, scheme: any): Promise<void> => {
+  initializeWithSeed = (seed: string, scheme: any): void => {
     switch (scheme) {
       case "ED25519":
         this.signer = new RawSigner(
@@ -199,14 +212,13 @@ export class BluefinClient {
       default:
         throw new Error("Provided scheme is invalid");
     }
-    this.walletAddress = await this.signer.getAddress();
   };
 
   initContractCalls = async (deployment?: any) => {
     if (!this.signer) {
       throw Error("Signer not Initialized");
     }
-    const _deployment = deployment | this.getDeploymentJson();
+    const _deployment = deployment || this.getDeploymentJson();
     this.contractCalls = new ContractCalls(
       this.getSigner(),
       this.getProvider(),
@@ -245,7 +257,8 @@ export class BluefinClient {
     if (!this.orderSigner) {
       throw Error("Order Signer not initialized");
     }
-    const orderToSign: Order = createOrder(order);
+    const orderToSign: Order = this.createOrderToSign(order);
+    console.log(orderToSign);
     const signature = this.orderSigner.signOrder(orderToSign);
     const signedOrder: OrderSignatureResponse = {
       symbol: order.symbol,
@@ -253,20 +266,25 @@ export class BluefinClient {
       quantity: order.quantity,
       side: order.side,
       orderType: order.orderType,
-      triggerPrice: order.triggerPrice,
-      postOnly: order.postOnly,
-      leverage: order.leverage,
-      reduceOnly: order.reduceOnly,
-      salt: order.salt,
-      expiration: order.expiration,
-      maker: order.maker,
+      triggerPrice:
+        order.orderType === ORDER_TYPE.STOP_MARKET ||
+        order.orderType === ORDER_TYPE.LIMIT
+          ? order.triggerPrice || 0
+          : 0,
+      postOnly: orderToSign.postOnly,
+      leverage: toBaseNumber(orderToSign.leverage),
+      reduceOnly: orderToSign.reduceOnly,
+      salt: toBaseNumber(orderToSign.salt),
+      expiration: toBaseNumber(orderToSign.expiration),
+      maker: orderToSign.maker,
       orderSignature: signature,
+      orderbookOnly: orderToSign.orderbookOnly,
     };
     return signedOrder;
   };
 
   /**
-   * Places a signed order on firefly exchange
+   * Places a signed order on bluefin exchange
    * @param params PlaceOrderRequest containing the signed order created using createSignedOrder
    * @returns PlaceOrderResponse containing status and data. If status is not 201, order placement failed.
    */
@@ -289,8 +307,8 @@ export class BluefinClient {
         timeInForce: params.timeInForce || TIME_IN_FORCE.GOOD_TILL_TIME,
         postOnly: params.postOnly || false,
         clientId: params.clientId
-          ? `firefly-client: ${params.clientId}`
-          : "firefly-client",
+          ? `bluefin-client: ${params.clientId}`
+          : "bluefin-client",
       },
       { isAuthenticationRequired: true }
     );
@@ -310,6 +328,82 @@ export class BluefinClient {
       timeInForce: params.timeInForce,
       postOnly: params.postOnly,
       clientId: params.clientId,
+    });
+
+    return response;
+  };
+  /**
+   * Creates signature for cancelling orders
+   * @param params OrderCancelSignatureRequest containing market symbol and order hashes to be cancelled
+   * @returns generated signature string
+   */
+  createOrderCancellationSignature = async (
+    params: OrderCancelSignatureRequest
+  ): Promise<string> => {
+    return "";
+  };
+
+  /**
+   * Posts to exchange for cancellation of provided orders with signature
+   * @param params OrderCancellationRequest containing order hashes to be cancelled and cancellation signature
+   * @returns response from exchange server
+   */
+  placeCancelOrder = async (params: OrderCancellationRequest) => {
+    const response = await this.apiService.delete<CancelOrderResponse>(
+      SERVICE_URLS.ORDERS.ORDERS_HASH,
+      {
+        symbol: params.symbol,
+        orderHashes: params.hashes,
+        cancelSignature: params.signature,
+        parentAddress: params.parentAddress,
+      },
+      { isAuthenticationRequired: true }
+    );
+    return response;
+  };
+
+  /**
+   * Creates signature and posts order for cancellation on exchange of provided orders
+   * @param params OrderCancelSignatureRequest containing order hashes to be cancelled
+   * @returns response from exchange server
+   */
+  postCancelOrder = async (params: OrderCancelSignatureRequest) => {
+    if (params.hashes.length <= 0) {
+      throw Error(`No orders to cancel`);
+    }
+    const signature = await this.createOrderCancellationSignature(params);
+    const response = await this.placeCancelOrder({
+      ...params,
+      signature,
+    });
+    return response;
+  };
+
+  /**
+   * Cancels all open orders for a given market
+   * @param symbol DOT-PERP, market symbol
+   * @returns cancellation response
+   */
+  cancelAllOpenOrders = async (
+    symbol: MarketSymbol,
+    parentAddress?: string
+  ) => {
+    const openOrders = await this.getUserOrders({
+      symbol,
+      statuses: [
+        ORDER_STATUS.OPEN,
+        ORDER_STATUS.PARTIAL_FILLED,
+        ORDER_STATUS.PENDING,
+      ],
+      parentAddress,
+    });
+
+    const hashes = openOrders.data?.map((order) => order.hash) as string[];
+
+    const response = await this.postCancelOrder({
+      hashes,
+      symbol,
+      parentAddress,
     });
 
     return response;
@@ -779,7 +873,8 @@ export class BluefinClient {
   };
 
   private getDeploymentJson = (): any => {
-    return {}; // will be fteched from DAPI, may be stored in configs table
+    // will be fetched from DAPI, may be stored in configs table
+    return readFile("./deployment.json");
   };
 
   /**
@@ -794,44 +889,6 @@ export class BluefinClient {
     contractAddress?: string,
     market?: MarketSymbol
   ): any => {};
-
-  /**
-   * Gets the contract address of provided name
-   * @param contractName name of the contract eg: `Perpetual`, `USDC` etc
-   * @param contract address of contract
-   * @param market name of the specific market to get address for
-   * @returns contract address of given name
-   */
-  private getContractAddressByName = (
-    contractName: string,
-    contract?: string,
-    market?: MarketSymbol
-  ): string => {
-    // if a market name is provided and contract address is not provided
-    if (market && !contract) {
-      try {
-        contract = this.contractAddresses[market][contractName];
-      } catch (e) {
-        contract = "";
-      }
-    }
-
-    // if contract address is not provided and also market name is not provided
-    if (!market && !contract) {
-      try {
-        contract =
-          this.contractAddresses.auxiliaryContractsAddresses[contractName];
-      } catch (e) {
-        contract = "";
-      }
-    }
-
-    if (contract === "" || contract === undefined) {
-      throw Error(`Contract "${contractName}" not found in contract addresses`);
-    }
-
-    return contract;
-  };
 
   /**
    * Private function to create order payload that is to be signed on-chain
@@ -851,14 +908,12 @@ export class BluefinClient {
     else {
       expiration.setMonth(expiration.getMonth() + 1);
     }
-
     const salt =
       params.salt && params.salt < this.maxSaltLimit
         ? toBigNumber(params.salt)
         : toBigNumber(generateRandomNumber(1_000));
-
     return {
-      market: this.contractCalls.onChainCalls.getPerpetualID(),
+      market: this.contractCalls.onChainCalls.getPerpetualID(params.symbol),
       price: toBigNumber(params.price),
       isBuy: params.side === ORDER_SIDE.BUY,
       quantity: toBigNumber(params.quantity),
@@ -867,11 +922,12 @@ export class BluefinClient {
         ? parentAddress
         : this.getPublicAddress().toLocaleLowerCase(),
       reduceOnly: params.reduceOnly || false,
-      expiration:
-        toBigNumber(params.expiration) ||
-        toBigNumber(Math.floor(expiration.getTime() / 1000)), // /1000 to convert time in seconds
+      expiration: toBigNumber(
+        params.expiration || Math.floor(expiration.getTime() / 1000)
+      ), // /1000 to convert time in seconds
       postOnly: params.postOnly || false,
       salt,
+      orderbookOnly: params.orderbookOnly || true,
     };
   };
 
