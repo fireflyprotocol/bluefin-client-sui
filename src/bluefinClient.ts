@@ -221,13 +221,6 @@ export class BluefinClient {
     return this.signer;
   };
 
-  getOrderSigner = (): OrderSigner => {
-    if (!this.orderSigner) {
-      throw Error("Order Signer not initialized");
-    }
-    return this.orderSigner;
-  };
-
   getProvider = (): JsonRpcProvider => {
     return this.provider;
   };
