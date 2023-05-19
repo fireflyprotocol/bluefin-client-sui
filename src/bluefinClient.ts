@@ -79,6 +79,7 @@ import { generateRandomNumber } from "../utils/utils";
 import { ContractCalls } from "./exchange/contractService";
 import { ResponseSchema } from "./exchange/contractErrorHandling.service";
 import { OnboardingSigner } from "../submodules/library-sui/src/classes/onBoardSigner";
+import { createOrder } from "../submodules/library-sui/src/utils";
 
 // import { Contract } from "ethers";
 
@@ -171,6 +172,7 @@ export class BluefinClient {
   initializeWithKeyPair = async (keypair: Keypair): Promise<void> => {
     this.signer = new RawSigner(keypair, this.provider);
     this.walletAddress = await this.signer.getAddress();
+    this.initOrderSigner(keypair);
   };
 
   /**
@@ -185,12 +187,14 @@ export class BluefinClient {
           Ed25519Keypair.deriveKeypair(seed),
           this.provider
         );
+        this.initOrderSigner(Ed25519Keypair.deriveKeypair(seed));
         break;
       case "Secp256k1":
         this.signer = new RawSigner(
           Secp256k1Keypair.deriveKeypair(seed),
           this.provider
         );
+        this.initOrderSigner(Secp256k1Keypair.deriveKeypair(seed));
         break;
       default:
         throw new Error("Provided scheme is invalid");
@@ -210,19 +214,18 @@ export class BluefinClient {
     );
   };
 
-  initOrderSigner = async (keypair: Keypair) => {
-    this.orderSigner = new OrderSigner(keypair);
-  };
-
-  private getDeploymentJson = (): any => {
-    return {}; // will be fteched from DAPI, may be stored in configs table
-  };
-
   getSigner = (): RawSigner => {
     if (!this.signer) {
       throw Error("Signer not initialized");
     }
     return this.signer;
+  };
+
+  getOrderSigner = (): OrderSigner => {
+    if (!this.orderSigner) {
+      throw Error("Order Signer not initialized");
+    }
+    return this.orderSigner;
   };
 
   getProvider = (): JsonRpcProvider => {
@@ -249,18 +252,7 @@ export class BluefinClient {
     if (!this.orderSigner) {
       throw Error("Order Signer not initialized");
     }
-    const orderToSign: Order = {
-      market: this.contractCalls.onChainCalls.getPerpetualID(),
-      maker: this.getPublicAddress().toLocaleLowerCase(),
-      price: toBigNumber(order.price),
-      isBuy: order.side === ORDER_SIDE.BUY,
-      quantity: toBigNumber(order.quantity),
-      leverage: toBigNumber(order.leverage || 1),
-      reduceOnly: order.reduceOnly || false,
-      expiration: toBigNumber(order.expiration), // /1000 to convert time in seconds
-      postOnly: order.postOnly,
-      salt: toBigNumber(order.salt),
-    };
+    const orderToSign: Order = createOrder(order);
     const signature = this.orderSigner.signOrder(orderToSign);
     const signedOrder: OrderSignatureResponse = {
       symbol: order.symbol,
@@ -788,6 +780,14 @@ export class BluefinClient {
   //= ==============================================================//
   //                    PRIVATE HELPER FUNCTIONS
   //= ==============================================================//
+
+  private initOrderSigner = (keypair: Keypair) => {
+    this.orderSigner = new OrderSigner(keypair);
+  };
+
+  private getDeploymentJson = (): any => {
+    return {}; // will be fteched from DAPI, may be stored in configs table
+  };
 
   /**
    * Private function to get the contract address of given contract name mapped with respective factory
