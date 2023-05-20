@@ -8,6 +8,7 @@ import {
   bigNumber,
   bnStrToBaseNumber,
   toBaseNumber,
+  hexToBuffer,
 } from "../submodules/library-sui/src/library";
 import {
   AdjustLeverageResponse,
@@ -84,6 +85,7 @@ import { generateRandomNumber, readFile } from "../utils/utils";
 import { ContractCalls } from "./exchange/contractService";
 import { ResponseSchema } from "./exchange/contractErrorHandling.service";
 import { OnboardingSigner } from "../submodules/library-sui/src/classes/onBoardSigner";
+import { sha256 } from "@noble/hashes/sha256";
 
 // import { Contract } from "ethers";
 
@@ -413,13 +415,27 @@ export class BluefinClient {
    * Returns the USDC balance of user in USDC contract
    * @returns list of User's coins in USDC contract
    */
-  getUSDCCoins = async (limit?: number, cursor?: string): Promise<any[]> => {
-    return await this.contractCalls.onChainCalls.getUSDCCoins({
-      address: await this.signer.getAddress(),
-      currencyType: this.contractCalls.onChainCalls.getCurrencyID(),
-      limit: limit,
-      cursor: cursor,
-    });
+  getUSDCCoins = async (
+    amount?: number,
+    limit?: number,
+    cursor?: string
+  ): Promise<any[]> => {
+    if (amount) {
+      return await this.contractCalls.onChainCalls.getUSDCoinHavingBalance({
+        amount: toBigNumberStr(amount, 6),
+        address: await this.signer.getAddress(),
+        currencyID: this.contractCalls.onChainCalls.getCurrencyID(),
+        limit: limit,
+        cursor: cursor,
+      });
+    } else {
+      return await this.contractCalls.onChainCalls.getUSDCCoins({
+        address: await this.signer.getAddress(),
+        currencyType: this.contractCalls.onChainCalls.getCurrencyID(),
+        limit: limit,
+        cursor: cursor,
+      });
+    }
   };
 
   /**
@@ -428,6 +444,20 @@ export class BluefinClient {
    * @returns Number representing balance of user in Margin Bank contract
    */
   getMarginBankBalance = async (): Promise<number> => {
+    return await this.contractCalls.onChainCalls.getUSDCBalance(
+      {
+        address: await this.signer.getAddress(),
+        currencyID: this.contractCalls.onChainCalls.getCurrencyID(),
+      },
+      this.signer
+    );
+  };
+
+  /**
+   * Returns the usdc Balance(Free Collateral) of the account in USDC contract
+   * @returns Number representing balance of user in USDC contract
+   */
+  getUSDCBalance = async (): Promise<number> => {
     return await this.contractCalls.onChainCalls.getUSDCBalance(
       {
         address: await this.signer.getAddress(),
@@ -467,30 +497,95 @@ export class BluefinClient {
   adjustLeverage = async (
     params: adjustLeverageRequest
   ): Promise<ResponseSchema> => {
-    const tx = await this.contractCalls.onChainCalls.adjustLeverage({
-      leverage: params.leverage,
-      account: await this.signer.getAddress(),
-      perpID: this.contractCalls.onChainCalls.getPerpetualID(params.symbol),
+    const userPosition = await this.getUserPosition({
+      symbol: params.symbol,
+      parentAddress: params.parentAddress,
     });
-    if (Transaction.getStatus(tx) == "success") {
-      return {
-        ok: true,
-        data: {},
-        message: "leveraged adjusted successfully",
-        code: 200,
-        stack: "",
-      };
-    } else {
-      return {
-        ok: false,
-        data: {},
-        message: "leveraged adjustment failed",
-        code: 500,
-        stack: "",
-      };
+    if (!userPosition.data) {
+      throw Error(`User positions data doesn't exist`);
     }
+    const position = userPosition.data as any as GetPositionResponse;
+
+    // if user position exists, make contract call
+    if (Object.keys(position).length > 0) {
+      // TODO [BFLY-603]: this should be returned as array from dapi, remove this typecasting when done
+      return await this.contractCalls.adjustLeverageContractCall(
+        params.leverage,
+        params.symbol,
+        params.parentAddress
+      );
+    }
+    // call API to update leverage
+    const {
+      ok,
+      data,
+      response: { errorCode, message },
+    } = await this.updateLeverage({
+      symbol: params.symbol,
+      leverage: params.leverage,
+      parentAddress: params.parentAddress,
+    });
+    const response: ResponseSchema = { ok, data, code: errorCode, message };
+    return response;
   };
 
+  /**
+   * Add or remove margin from the open position
+   * @param symbol market symbol of the open position
+   * @param operationType operation you want to perform `Add` | `Remove` margin
+   * @param amount (number) amount user wants to add or remove from the position
+   * @returns ResponseSchema
+   */
+
+  adjustMargin = async (
+    symbol: MarketSymbol,
+    operationType: ADJUST_MARGIN,
+    amount: number
+  ): Promise<ResponseSchema> => {
+    return await this.contractCalls.adjustMarginContractCall(
+      symbol,
+      operationType,
+      amount
+    );
+  };
+
+  /**
+   * Deposits USDC to Margin Bank contract
+   * @param amount amount of USDC to deposit
+   * @param coinID coinID of USDC coint to use
+   * @returns ResponseSchema
+   */
+  depositToMarginBank = async (
+    amount: number,
+    coinID: string
+  ): Promise<ResponseSchema> => {
+    return await this.contractCalls.depositToMarginBankContractCall(
+      amount,
+      coinID
+    );
+  };
+
+  /**
+   * withdraws USDC from Margin Bank contract
+   * @param amount amount of USDC to withdraw
+   * @returns ResponseSchema
+   */
+  withdrawFromMarginBank = async (amount: number): Promise<ResponseSchema> => {
+    return await this.contractCalls.withdrawFromMarginBankContractCall(amount);
+  };
+
+  /**
+   * Sets subaccount to wallet.
+   * @param publicAddress the address to add as sub account
+   * @param status true to add, false to remove
+   * @returns ResponseSchema
+   */
+  setSubAccount = async (
+    publicAddress: string,
+    status: boolean
+  ): Promise<ResponseSchema> => {
+    return await this.contractCalls.setSubAccount(publicAddress, status);
+  };
   /**
    * Gets Users default leverage.
    * @param symbol market symbol get information about
@@ -518,23 +613,6 @@ export class BluefinClient {
       throw Error(`Provided Market Symbol(${symbol}) does not exist`);
     }
     return bnStrToBaseNumber(exchangeInfo.data.defaultLeverage);
-  };
-
-  /**
-   * Add or remove margin from the open position
-   * @param symbol market symbol of the open position
-   * @param operationType operation you want to perform `Add` | `Remove` margin
-   * @param amount (number) amount user wants to add or remove from the position
-   * @param perpetualAddress (address) address of Perpetual contract
-   * @returns ResponseSchema
-   */
-  adjustMargin = async (
-    symbol: MarketSymbol,
-    operationType: ADJUST_MARGIN,
-    amount: number,
-    perpetualAddress?: string
-  ): Promise<ResponseSchema> => {
-    return;
   };
 
   /**
@@ -583,7 +661,7 @@ export class BluefinClient {
 
   /**
    * Gets user trades
-   * @param params PlaceOrderResponse
+   * @param params GetUserTradesRequest
    * @returns GetUserTradesResponse
    */
   getUserTrades = async (params: GetUserTradesRequest) => {
@@ -825,8 +903,8 @@ export class BluefinClient {
       let signature: string;
 
       if (this.kmsSigner !== undefined) {
-        // const hashedMessageSHA = this.web3.utils.sha3(
-        //   this.network.onboardingUrl
+        // const hashedMessageSHA = sha256(
+        //   hexToBuffer(this.network.onboardingUrl)
         // );
         // /*
         //   For every orderHash sent to etherium etherium will hash it and wrap
@@ -835,8 +913,8 @@ export class BluefinClient {
         // */
         // //@ts-ignore
         // const hashedMessageETH =
-        //   this.web3.eth.accounts.hashMessage(hashedMessageSHA);
-        // signature = await this.kmsSigner._signDigest(hashedMessageETH);
+        // this.signer.signData(hashedMessageSHA);
+        // (signature = await this.kmsSigner._signDigest(hashedMessageETH));
       } else {
         // sign onboarding message
         signature = await OnboardingSigner.createOnboardSignature(
@@ -876,19 +954,6 @@ export class BluefinClient {
     // will be fetched from DAPI, may be stored in configs table
     return readFile("./deployment.json");
   };
-
-  /**
-   * Private function to get the contract address of given contract name mapped with respective factory
-   * @param contractName name of the contract eg: `Perpetual`, `USDC` etc
-   * @param contract address of contract
-   * @param market name of the specific market to get address for
-   * @returns Contract | MarginBank | IsolatedTrader or throws error
-   */
-  private getContract = (
-    contractName: string,
-    contractAddress?: string,
-    market?: MarketSymbol
-  ): any => {};
 
   /**
    * Private function to create order payload that is to be signed on-chain

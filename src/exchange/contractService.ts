@@ -39,17 +39,28 @@ export class ContractCalls {
         {
           amount: amount.toString(),
           coinID: coinID,
+          bankID: this.onChainCalls.getBankID(),
+          accountAddress: await this.signer.getAddress(),
         },
         this.signer
       );
     }, interpolate(SuccessMessages.depositToBank, { amount }));
   };
 
-  adjustLeverageContractCall = async (leverage: number) => {
+  adjustLeverageContractCall = async (
+    leverage: number,
+    symbol: string,
+    parentAddress?: string
+  ) => {
+    const perpId = this.onChainCalls.getPerpetualID(symbol);
     return TransformToResponseSchema(async () => {
       return await this.onChainCalls.adjustLeverage(
         {
           leverage: leverage,
+          perpID: perpId,
+          account: parentAddress
+            ? parentAddress
+            : await this.signer.getAddress(),
         },
         this.signer
       );
@@ -59,8 +70,8 @@ export class ContractCalls {
   setSubAccount = async (
     publicAddress: address,
     status: boolean,
-    gasLimit: number
-  ) => {
+    gasLimit?: number
+  ): Promise<ResponseSchema> => {
     return TransformToResponseSchema(async () => {
       return await this.onChainCalls.setSubAccount(
         {
@@ -70,14 +81,16 @@ export class ContractCalls {
         },
         this.signer
       );
-    }, interpolate(SuccessMessages.setSubAccounts, { publicAddress, status }));
+    }, interpolate(SuccessMessages.setSubAccounts, { publicAddress: publicAddress, status: status ? "added" : "removed" }));
   };
 
   adjustMarginContractCall = async (
+    symbol: string,
     operationType: ADJUST_MARGIN,
     amount: number,
-    gasLimit: number
+    gasLimit?: number
   ) => {
+    const perpId = this.onChainCalls.getPerpetualID(symbol);
     const msg =
       operationType == ADJUST_MARGIN.Add
         ? interpolate(SuccessMessages.adjustMarginAdd, { amount })
@@ -87,6 +100,7 @@ export class ContractCalls {
         return await this.onChainCalls.addMargin(
           {
             amount: amount,
+            perpID: perpId,
             gasBudget: gasLimit,
           },
           this.signer
@@ -96,6 +110,7 @@ export class ContractCalls {
           {
             amount: amount,
             gasBudget: gasLimit,
+            perpID: perpId,
           },
           this.signer
         );
