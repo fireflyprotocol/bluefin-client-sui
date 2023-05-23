@@ -7,9 +7,7 @@ import {
   Ed25519Keypair,
 } from "@mysten/sui.js";
 import fs from "fs";
-import { BluefinClient } from "../src/bluefinClient";
 import {
-  Client,
   OnChainCalls,
   requestGas,
   toBigNumberStr,
