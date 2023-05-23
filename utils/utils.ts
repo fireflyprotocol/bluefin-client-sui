@@ -7,6 +7,13 @@ import {
   Ed25519Keypair,
 } from "@mysten/sui.js";
 import fs from "fs";
+import { BluefinClient } from "../src/bluefinClient";
+import {
+  Client,
+  OnChainCalls,
+  requestGas,
+  toBigNumberStr,
+} from "../submodules/library-sui";
 
 /**
  * Generates random number
@@ -49,4 +56,28 @@ export function readFile(filePath: string): any {
   return fs.existsSync(filePath)
     ? JSON.parse(fs.readFileSync(filePath).toString())
     : {};
+}
+
+export async function setupTestAccounts(
+  deployerWallet: OnChainCalls,
+  testWallets: any[]
+): Promise<boolean> {
+  {
+    const mintAmount = 1000000000;
+    for (const wallet of testWallets) {
+      try {
+        await requestGas(wallet.privateAddress);
+      } catch (e) {
+        console.log(e);
+      }
+    }
+    for (const wallet of testWallets) {
+      await deployerWallet.mintUSDC({
+        amount: toBigNumberStr(mintAmount.toString(), 6),
+        to: wallet.privateAddress,
+        gasBudget: 10000000,
+      });
+    }
+    return true;
+  }
 }

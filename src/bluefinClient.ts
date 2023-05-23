@@ -450,16 +450,8 @@ export class BluefinClient {
    * @param contract (optional) address of Margin Bank contract
    * @returns Number representing balance of user in Margin Bank contract
    */
-  getMarginBankBalance = async (): Promise<any> => {
-    const id = this.contractCalls.onChainCalls.getBankID();
-    const obj = await this.contractCalls.onChainCalls.getOnChainObject(id);
-    if (obj) {
-      if (obj.data.content["fields"]["coinBalance"]) {
-        return usdcToBaseNumber(obj.data.content["fields"]["coinBalance"]);
-      } else {
-        return undefined;
-      }
-    }
+  getMarginBankBalance = async (): Promise<number> => {
+    return this.contractCalls.getMarginBankBalance();
   };
 
   /**
@@ -508,36 +500,12 @@ export class BluefinClient {
   adjustLeverage = async (
     params: adjustLeverageRequest
   ): Promise<ResponseSchema> => {
-    const userPosition = await this.getUserPosition({
-      symbol: params.symbol,
-      parentAddress: params.parentAddress,
-    });
-    if (!userPosition.data) {
-      throw Error(`User positions data doesn't exist`);
-    }
-    const position = userPosition.data as any as GetPositionResponse;
-
-    // if user position exists, make contract call
-    if (Object.keys(position).length > 0) {
-      // TODO [BFLY-603]: this should be returned as array from dapi, remove this typecasting when done
-      return await this.contractCalls.adjustLeverageContractCall(
-        params.leverage,
-        params.symbol,
-        params.parentAddress
-      );
-    }
-    // call API to update leverage
-    const {
-      ok,
-      data,
-      response: { errorCode, message },
-    } = await this.updateLeverage({
-      symbol: params.symbol,
-      leverage: params.leverage,
-      parentAddress: params.parentAddress,
-    });
-    const response: ResponseSchema = { ok, data, code: errorCode, message };
-    return response;
+    // TODO: Add Dapi checks and adjust leverage on dapi once dapi is up
+    return await this.contractCalls.adjustLeverageContractCall(
+      params.leverage,
+      params.symbol,
+      params.parentAddress
+    );
   };
 
   /**
@@ -576,7 +544,7 @@ export class BluefinClient {
         await this.contractCalls.onChainCalls.getUSDCoinHavingBalance({
           amount: amount,
         })
-      ).coinObjectId;
+      )?.coinObjectId;
     }
     if (coin) {
       return await this.contractCalls.depositToMarginBankContractCall(
