@@ -9,6 +9,7 @@ import {
   bnStrToBaseNumber,
   toBaseNumber,
   hexToBuffer,
+  usdcToBaseNumber,
 } from "../submodules/library-sui/src/library";
 import {
   AdjustLeverageResponse,
@@ -76,6 +77,7 @@ import {
 import {
   ADJUST_MARGIN,
   MARGIN_TYPE,
+  MARKET_SYMBOLS,
   ORDER_SIDE,
   ORDER_STATUS,
   ORDER_TYPE,
@@ -113,8 +115,7 @@ export class BluefinClient {
 
   // the number of decimals supported by USDC contract
   private MarginTokenPrecision = 6;
-  contractAddresses: Map<string, string>;
-
+  private contractAddresses: Map<string, string>;
   /**
    * initializes the class instance
    * @param _isTermAccepted boolean indicating if exchange terms and conditions are accepted
@@ -253,14 +254,13 @@ export class BluefinClient {
     return this.signer.connect(this.provider);
   };
 
-  createSignedOrder = async (
+  createSignedOrder = (
     order: OrderSignatureRequest
-  ): Promise<OrderSignatureResponse> => {
+  ): OrderSignatureResponse => {
     if (!this.orderSigner) {
       throw Error("Order Signer not initialized");
     }
     const orderToSign: Order = this.createOrderToSign(order);
-    console.log(orderToSign);
     const signature = this.orderSigner.signOrder(orderToSign);
     const signedOrder: OrderSignatureResponse = {
       symbol: order.symbol,
@@ -324,7 +324,7 @@ export class BluefinClient {
    * @returns PlaceOrderResponse
    */
   postOrder = async (params: PostOrderRequest) => {
-    const signedOrder = await this.createSignedOrder(params);
+    const signedOrder = this.createSignedOrder(params);
     const response = await this.placeSignedOrder({
       ...signedOrder,
       timeInForce: params.timeInForce,
@@ -421,20 +421,27 @@ export class BluefinClient {
     cursor?: string
   ): Promise<any[]> => {
     if (amount) {
-      return await this.contractCalls.onChainCalls.getUSDCoinHavingBalance({
-        amount: toBigNumberStr(amount, 6),
-        address: await this.signer.getAddress(),
-        currencyID: this.contractCalls.onChainCalls.getCurrencyID(),
-        limit: limit,
-        cursor: cursor,
-      });
+      const coin =
+        await this.contractCalls.onChainCalls.getUSDCoinHavingBalance({
+          amount: amount,
+          address: await this.signer.getAddress(),
+          currencyID: this.contractCalls.onChainCalls.getCurrencyID(),
+          limit: limit,
+          cursor: cursor,
+        });
+      if (coin) {
+        coin.balance = usdcToBaseNumber(coin.balance);
+      }
+      return coin;
     } else {
-      return await this.contractCalls.onChainCalls.getUSDCCoins({
+      const coins = await this.contractCalls.onChainCalls.getUSDCCoins({
         address: await this.signer.getAddress(),
-        currencyType: this.contractCalls.onChainCalls.getCurrencyID(),
-        limit: limit,
-        cursor: cursor,
       });
+      coins.data.forEach((coin) => {
+        coin.balance = usdcToBaseNumber(coin.balance);
+      });
+
+      return coins;
     }
   };
 
@@ -443,14 +450,16 @@ export class BluefinClient {
    * @param contract (optional) address of Margin Bank contract
    * @returns Number representing balance of user in Margin Bank contract
    */
-  getMarginBankBalance = async (): Promise<number> => {
-    return await this.contractCalls.onChainCalls.getUSDCBalance(
-      {
-        address: await this.signer.getAddress(),
-        currencyID: this.contractCalls.onChainCalls.getCurrencyID(),
-      },
-      this.signer
-    );
+  getMarginBankBalance = async (): Promise<any> => {
+    const id = this.contractCalls.onChainCalls.getBankID();
+    const obj = await this.contractCalls.onChainCalls.getOnChainObject(id);
+    if (obj) {
+      if (obj.data.content["fields"]["coinBalance"]) {
+        return usdcToBaseNumber(obj.data.content["fields"]["coinBalance"]);
+      } else {
+        return undefined;
+      }
+    }
   };
 
   /**
@@ -472,14 +481,16 @@ export class BluefinClient {
    * Assumes that the user wallet has native gas Tokens on Testnet
    * @returns Boolean true if user is funded, false otherwise
    */
-  mintTestUSDC = async (): Promise<boolean> => {
+  mintTestUSDC = async (amount?: number): Promise<boolean> => {
     if (this.network === Networks.PRODUCTION_SUI) {
       throw Error(`Function does not work on PRODUCTION`);
     }
     // mint 10000 USDC
+    const mintAmount = amount || 10000;
     const txResponse = await this.contractCalls.onChainCalls.mintUSDC({
-      amount: toBigNumberStr(10000, 6),
+      amount: toBigNumberStr(mintAmount, this.MarginTokenPrecision),
       to: await this.signer.getAddress(),
+      gasBudget: 1000000000,
     });
     if (Transaction.getStatus(txResponse) == "success") {
       return true;
@@ -557,12 +568,24 @@ export class BluefinClient {
    */
   depositToMarginBank = async (
     amount: number,
-    coinID: string
+    coinID?: string
   ): Promise<ResponseSchema> => {
-    return await this.contractCalls.depositToMarginBankContractCall(
-      amount,
-      coinID
-    );
+    let coin = coinID;
+    if (amount && !coinID) {
+      coin = (
+        await this.contractCalls.onChainCalls.getUSDCoinHavingBalance({
+          amount: amount,
+        })
+      ).coinObjectId;
+    }
+    if (coin) {
+      return await this.contractCalls.depositToMarginBankContractCall(
+        amount,
+        coin
+      );
+    } else {
+      throw Error(`User has no coin with amount ${amount} to deposit`);
+    }
   };
 
   /**
@@ -570,8 +593,14 @@ export class BluefinClient {
    * @param amount amount of USDC to withdraw
    * @returns ResponseSchema
    */
-  withdrawFromMarginBank = async (amount: number): Promise<ResponseSchema> => {
-    return await this.contractCalls.withdrawFromMarginBankContractCall(amount);
+  withdrawFromMarginBank = async (amount?: number): Promise<ResponseSchema> => {
+    if (amount) {
+      return await this.contractCalls.withdrawFromMarginBankContractCall(
+        amount
+      );
+    } else {
+      return await this.contractCalls.withdrawAllFromMarginBankContractCall();
+    }
   };
 
   /**

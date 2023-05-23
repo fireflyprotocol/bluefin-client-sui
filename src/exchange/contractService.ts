@@ -7,6 +7,7 @@ import {
   TransformToResponseSchema,
 } from "./contractErrorHandling.service";
 import { default as interpolate } from "interpolate";
+import { toBigNumberStr } from "../../submodules/library-sui";
 
 export class ContractCalls {
   onChainCalls: OnChainCalls;
@@ -23,11 +24,17 @@ export class ContractCalls {
     return TransformToResponseSchema(async () => {
       return await this.onChainCalls.withdrawFromBank(
         {
-          amount: amount.toString(),
+          amount: toBigNumberStr(amount.toString(), 6),
         },
         this.signer
       );
     }, interpolate(SuccessMessages.withdrawMargin, { amount }));
+  };
+
+  withdrawAllFromMarginBankContractCall = async (): Promise<ResponseSchema> => {
+    return TransformToResponseSchema(async () => {
+      return await this.onChainCalls.withdrawAllMarginFromBank(this.signer);
+    }, interpolate(SuccessMessages.withdrawMargin, { amount: "all" }));
   };
 
   depositToMarginBankContractCall = async (
@@ -37,14 +44,14 @@ export class ContractCalls {
     return TransformToResponseSchema(async () => {
       return await this.onChainCalls.depositToBank(
         {
-          amount: amount.toString(),
+          amount: toBigNumberStr(amount.toString(), 6),
           coinID: coinID,
           bankID: this.onChainCalls.getBankID(),
           accountAddress: await this.signer.getAddress(),
         },
         this.signer
       );
-    }, interpolate(SuccessMessages.depositToBank, { amount }));
+    }, interpolate(SuccessMessages.depositToBank, { amount: amount }));
   };
 
   adjustLeverageContractCall = async (
@@ -81,7 +88,7 @@ export class ContractCalls {
         },
         this.signer
       );
-    }, interpolate(SuccessMessages.setSubAccounts, { publicAddress: publicAddress, status: status ? "added" : "removed" }));
+    }, interpolate(SuccessMessages.setSubAccounts, { address: publicAddress, status: status ? "added" : "removed" }));
   };
 
   adjustMarginContractCall = async (
