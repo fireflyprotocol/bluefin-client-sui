@@ -1,14 +1,10 @@
-/* eslint-disable prettier/prettier */
-
 import { AwsKmsSigner } from "ethers-aws-kms-signer";
 
 import {
   toBigNumberStr,
   toBigNumber,
-  bigNumber,
   bnStrToBaseNumber,
   toBaseNumber,
-  hexToBuffer,
   usdcToBaseNumber,
 } from "../submodules/library-sui/src/library";
 import {
@@ -77,7 +73,6 @@ import {
 import {
   ADJUST_MARGIN,
   MARGIN_TYPE,
-  MARKET_SYMBOLS,
   ORDER_SIDE,
   ORDER_STATUS,
   ORDER_TYPE,
@@ -87,7 +82,6 @@ import { generateRandomNumber, readFile } from "../utils/utils";
 import { ContractCalls } from "./exchange/contractService";
 import { ResponseSchema } from "./exchange/contractErrorHandling.service";
 import { OnboardingSigner } from "../submodules/library-sui/src/classes/onBoardSigner";
-import { sha256 } from "@noble/hashes/sha256";
 
 // import { Contract } from "ethers";
 
@@ -115,12 +109,12 @@ export class BluefinClient {
 
   // the number of decimals supported by USDC contract
   private MarginTokenPrecision = 6;
-  private contractAddresses: Map<string, string>;
   /**
    * initializes the class instance
    * @param _isTermAccepted boolean indicating if exchange terms and conditions are accepted
    * @param _network containing network rpc url and chain id
    * @param _account accepts either privateKey or AWS-KMS-SIGNER object if user intend to sign using kms
+   * @param _scheme signature scheme to be used
    */
   constructor(
     _isTermAccepted: boolean,
@@ -156,7 +150,9 @@ export class BluefinClient {
   }
 
   /**
-   * onboards user
+   * @description
+   * initializes the required objects
+   * @param userOnboarding boolean indicating if user onboarding is required
    */
   init = async (userOnboarding: boolean = true) => {
     if (!this.signer) {
@@ -169,6 +165,12 @@ export class BluefinClient {
     }
   };
 
+  /**
+   * @description
+   * initializes client with AwsKmsSigner object
+   * @param awsKmsSigner AwsKmsSigner object
+   * @returns void
+   * */
   initializeWithKMS = async (awsKmsSigner: AwsKmsSigner): Promise<void> => {
     try {
       this.kmsSigner = awsKmsSigner;
@@ -181,9 +183,9 @@ export class BluefinClient {
   };
 
   /**
+   * @description
    * initializes web3 and wallet with the given account private key
    * @param keypair key pair for the account to be used for placing orders
-   *
    */
   initializeWithKeyPair = async (keypair: Keypair): Promise<void> => {
     this.signer = new RawSigner(keypair, this.provider);
@@ -192,9 +194,11 @@ export class BluefinClient {
   };
 
   /**
+   * @description
    * initializes web3 and wallet with the given account private key
    * @param seed seed for the account to be used for placing orders
    * @param scheme signature scheme to be used
+   * @returns void
    */
   initializeWithSeed = (seed: string, scheme: any): void => {
     switch (scheme) {
@@ -217,6 +221,11 @@ export class BluefinClient {
     }
   };
 
+  /**
+   * @description
+   * initializes contract calls
+   * @param deployment (optional) The deployment json provided by deployer
+   */
   initContractCalls = async (deployment?: any) => {
     if (!this.signer) {
       throw Error("Signer not Initialized");
@@ -229,17 +238,31 @@ export class BluefinClient {
     );
   };
 
+  /**
+   * @description
+   * Gets the RawSigner of the client
+   * @returns RawSigner
+   * */
   getSigner = (): RawSigner => {
     if (!this.signer) {
       throw Error("Signer not initialized");
     }
     return this.signer;
   };
-
+  /**
+   * @description
+   * Gets the RPC Provider of the client
+   * @returns JsonRPCProvider
+   * */
   getProvider = (): JsonRpcProvider => {
     return this.provider;
   };
 
+  /**
+   * @description
+   * Gets the wallets Public address
+   * @returns string
+   * */
   getPublicAddress = (): string => {
     if (!this.signer) {
       Error("Signer not initialized");
@@ -247,12 +270,24 @@ export class BluefinClient {
     return this.walletAddress;
   };
 
+  /**
+   * @description
+   * Gets the SignerWithProvider of the client
+   * @returns SignerWithProvider
+   * */
   getSignerWithProvider = (): SignerWithProvider => {
     if (!this.signer) {
       throw Error("Signer not initialized");
     }
     return this.signer.connect(this.provider);
   };
+
+  /**
+   * @description
+   * Gets a signed order from the client
+   * @returns OrderSignatureResponse
+   * @param order OrderSignatureRequest
+   * */
 
   createSignedOrder = (
     order: OrderSignatureRequest
@@ -286,6 +321,7 @@ export class BluefinClient {
   };
 
   /**
+   * @description
    * Places a signed order on bluefin exchange
    * @param params PlaceOrderRequest containing the signed order created using createSignedOrder
    * @returns PlaceOrderResponse containing status and data. If status is not 201, order placement failed.
@@ -319,6 +355,7 @@ export class BluefinClient {
   };
 
   /**
+   * @description
    * Given an order payload, signs it on chain and submits to exchange for placement
    * @param params PostOrderRequest
    * @returns PlaceOrderResponse
@@ -335,6 +372,7 @@ export class BluefinClient {
     return response;
   };
   /**
+   * @description
    * Creates signature for cancelling orders
    * @param params OrderCancelSignatureRequest containing market symbol and order hashes to be cancelled
    * @returns generated signature string
@@ -346,6 +384,7 @@ export class BluefinClient {
   };
 
   /**
+   * @description
    * Posts to exchange for cancellation of provided orders with signature
    * @param params OrderCancellationRequest containing order hashes to be cancelled and cancellation signature
    * @returns response from exchange server
@@ -365,6 +404,7 @@ export class BluefinClient {
   };
 
   /**
+   * @description
    * Creates signature and posts order for cancellation on exchange of provided orders
    * @param params OrderCancelSignatureRequest containing order hashes to be cancelled
    * @returns response from exchange server
@@ -382,6 +422,7 @@ export class BluefinClient {
   };
 
   /**
+   * @description
    * Cancels all open orders for a given market
    * @param symbol DOT-PERP, market symbol
    * @returns cancellation response
@@ -412,6 +453,7 @@ export class BluefinClient {
   };
 
   /**
+   * @description
    * Returns the USDC balance of user in USDC contract
    * @returns list of User's coins in USDC contract
    */
@@ -446,6 +488,7 @@ export class BluefinClient {
   };
 
   /**
+   * @description
    * Returns the usdc Balance(Free Collateral) of the account in Margin Bank contract
    * @param contract (optional) address of Margin Bank contract
    * @returns Number representing balance of user in Margin Bank contract
@@ -455,6 +498,7 @@ export class BluefinClient {
   };
 
   /**
+   * @description
    * Returns the usdc Balance(Free Collateral) of the account in USDC contract
    * @returns Number representing balance of user in USDC contract
    */
@@ -469,6 +513,7 @@ export class BluefinClient {
   };
 
   /**
+   * @description
    * Faucet function, mints 10K USDC to wallet - Only works on Testnet
    * Assumes that the user wallet has native gas Tokens on Testnet
    * @returns Boolean true if user is funded, false otherwise
@@ -492,6 +537,7 @@ export class BluefinClient {
   };
 
   /**
+   * @description
    * Updates user's leverage to given leverage
    * @param symbol market symbol get information about
    * @param leverage new leverage you want to change to
@@ -509,6 +555,7 @@ export class BluefinClient {
   };
 
   /**
+   * @description
    * Add or remove margin from the open position
    * @param symbol market symbol of the open position
    * @param operationType operation you want to perform `Add` | `Remove` margin
@@ -529,6 +576,7 @@ export class BluefinClient {
   };
 
   /**
+   * @description
    * Deposits USDC to Margin Bank contract
    * @param amount amount of USDC to deposit
    * @param coinID coinID of USDC coint to use
@@ -557,6 +605,7 @@ export class BluefinClient {
   };
 
   /**
+   * @description
    * withdraws USDC from Margin Bank contract
    * @param amount amount of USDC to withdraw
    * @returns ResponseSchema
@@ -572,6 +621,7 @@ export class BluefinClient {
   };
 
   /**
+   * @description
    * Sets subaccount to wallet.
    * @param publicAddress the address to add as sub account
    * @param status true to add, false to remove
@@ -583,7 +633,9 @@ export class BluefinClient {
   ): Promise<ResponseSchema> => {
     return await this.contractCalls.setSubAccount(publicAddress, status);
   };
+
   /**
+   * @description
    * Gets Users default leverage.
    * @param symbol market symbol get information about
    * @returns user default leverage
@@ -613,6 +665,7 @@ export class BluefinClient {
   };
 
   /**
+   * @description
    * Gets Orders placed by the user. Returns the first 50 orders by default.
    * @param params of type OrderRequest,
    * @returns OrderResponse array
@@ -629,6 +682,7 @@ export class BluefinClient {
   };
 
   /**
+   * @description
    * Gets user open position. If the market is not specified then will return first 50 open positions for 50 markets.
    * @param params GetPositionRequest
    * @returns GetPositionResponse
@@ -643,6 +697,7 @@ export class BluefinClient {
   };
 
   /**
+   * @description
    * Gets state of orderbook for provided market. At max top 50 bids/asks are retrievable
    * @param params GetOrdebookRequest
    * @returns GetOrderbookResponse
@@ -657,6 +712,7 @@ export class BluefinClient {
   };
 
   /**
+   * @description
    * Gets user trades
    * @param params GetUserTradesRequest
    * @returns GetUserTradesResponse
@@ -672,6 +728,7 @@ export class BluefinClient {
   };
 
   /**
+   * @description
    * Gets user Account Data
    * @returns GetAccountDataResponse
    */
@@ -685,6 +742,7 @@ export class BluefinClient {
   };
 
   /**
+   * @description
    * Gets verification status of user account
    * @param amount deposit amount
    * @returns verification status of user
@@ -700,6 +758,7 @@ export class BluefinClient {
   };
 
   /**
+   * @description
    * Gets user transaction history
    * @param params GetTransactionHistoryRequest
    * @returns GetUserTransactionHistoryResponse
@@ -718,6 +777,7 @@ export class BluefinClient {
   };
 
   /**
+   * @description
    * Gets user funding history
    * @param params GetFundingHistoryRequest
    * @returns GetUserTransactionHistoryResponse
@@ -734,6 +794,7 @@ export class BluefinClient {
   };
 
   /**
+   * @description
    * Gets user transfer history
    * @param params GetTransferHistoryRequest
    * @returns GetUserTransferHistoryResponse
@@ -750,6 +811,7 @@ export class BluefinClient {
   };
 
   /**
+   * @description
    * Gets market funding rate
    * @param symbol market symbol to fetch funding rate of
    * @returns GetFundingRateResponse
@@ -765,6 +827,7 @@ export class BluefinClient {
   };
 
   /**
+   * @description
    * Gets market recent trades
    * @param params GetMarketRecentTradesRequest
    * @returns GetMarketRecentTradesResponse
@@ -778,6 +841,7 @@ export class BluefinClient {
   };
 
   /**
+   * @description
    * Gets market candle stick data
    * @param params GetMarketRecentTradesRequest
    * @returns DAPIKlineResponse
@@ -791,6 +855,7 @@ export class BluefinClient {
   };
 
   /**
+   * @description
    * Gets publically available market info about market(s)
    * @param symbol (optional) market symbol get information about, by default fetches info on all available markets
    * @returns ExchangeInfo or ExchangeInfo[] in case no market was provided as input
@@ -804,6 +869,7 @@ export class BluefinClient {
   };
 
   /**
+   * @description
    * Gets MarketData data for market(s)
    * @param symbol (optional) market symbol get information about, by default fetches info on all available markets
    * @returns MarketData or MarketData[] in case no market was provided as input
@@ -817,6 +883,7 @@ export class BluefinClient {
   };
 
   /**
+   * @description
    * Gets Meta data of the market(s)
    * @param symbol (optional) market symbol get information about, by default fetches info on all available markets
    * @returns MarketMeta or MarketMeta[] in case no market was provided as input
@@ -830,6 +897,7 @@ export class BluefinClient {
   };
 
   /**
+   * @description
    * Gets Master Info of the market(s)
    * @param symbol (optional) market symbol get information about, by default fetches info on all available markets
    * @returns MasterInfo
@@ -843,6 +911,7 @@ export class BluefinClient {
   };
 
   /**
+   * @description
    * Gets the list of market symbols available on exchange
    * @returns array of strings representing MARKET SYMBOLS
    */
@@ -854,6 +923,7 @@ export class BluefinClient {
   };
 
   /**
+   * @description
    * Gets contract addresses of market
    * @param symbol (optional) market symbol get information about, by default fetches info on all available markets
    * @returns deployed contract addresses
@@ -867,6 +937,7 @@ export class BluefinClient {
   };
 
   /**
+   * @description
    * Gets status of the exchange
    * @returns StatusResponse
    */
@@ -878,6 +949,7 @@ export class BluefinClient {
   };
 
   /**
+   * @description
    * Gets ticker data of any market
    * @param symbol market symbol to get information about, if not provided fetches data of all markets
    * @returns TickerData
@@ -891,6 +963,7 @@ export class BluefinClient {
   };
 
   /**
+   * @description
    * Creates message to be signed, creates signature and authorize it from dapi
    * @returns auth token
    */
@@ -943,10 +1016,21 @@ export class BluefinClient {
   //                    PRIVATE HELPER FUNCTIONS
   //= ==============================================================//
 
+  /**
+   * @description
+   * Initializes order signer
+   * @param keypair keypair of the account to be used for placing orders
+   * @returns void
+   */
   private initOrderSigner = (keypair: Keypair) => {
     this.orderSigner = new OrderSigner(keypair);
   };
 
+  /**
+   * @description
+   * Gets deployment json from local file (will get from DAPI in future)
+   * @returns deployment json
+   * */
   private getDeploymentJson = (): any => {
     // will be fetched from DAPI, may be stored in configs table
     return readFile("./deployment.json");
@@ -994,6 +1078,7 @@ export class BluefinClient {
   };
 
   /**
+   * @description
    * Posts signed Auth Hash to dAPI and gets token in return if signature is valid
    * @returns GetAuthHashResponse which contains auth hash to be signed
    */
@@ -1010,6 +1095,7 @@ export class BluefinClient {
   };
 
   /**
+   * @description
    * Posts signed Auth Hash to dAPI and gets token in return if signature is valid
    * @returns GetAuthHashResponse which contains auth hash to be signed
    */
@@ -1030,6 +1116,7 @@ export class BluefinClient {
   };
 
   /**
+   * @description
    * Reset timer for cancel on disconnect for open orders
    * @param params PostTimerAttributes containing the countdowns of all markets
    * @returns PostTimerResponse containing accepted and failed countdowns. If status is not 201, request wasn't successful.
@@ -1050,6 +1137,7 @@ export class BluefinClient {
   };
 
   /**
+   * @description
    * Gets user Cancel on Disconnect timer
    * @returns GetCountDownsResponse
    */
