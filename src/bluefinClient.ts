@@ -380,6 +380,7 @@ export class BluefinClient {
   createOrderCancellationSignature = async (
     params: OrderCancelSignatureRequest
   ): Promise<string> => {
+    // TODO: once signed cancel order method added to library-sui, implement this
     return "";
   };
 
@@ -494,7 +495,7 @@ export class BluefinClient {
    * @returns Number representing balance of user in Margin Bank contract
    */
   getMarginBankBalance = async (): Promise<number> => {
-    return this.contractCalls.getMarginBankBalance();
+    return await this.contractCalls.getMarginBankBalance();
   };
 
   /**
