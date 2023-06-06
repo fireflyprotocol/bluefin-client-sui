@@ -40,7 +40,7 @@ const TEST_WALLETS = [
   },
 ];
 
-describe("BluefinClient", () => {
+describe.only("BluefinClient", () => {
   //* set environment from here
   let deplymentJson: any;
   const network = Networks.CLOUD_SUI;

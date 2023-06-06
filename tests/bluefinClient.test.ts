@@ -1,19 +1,16 @@
 /* eslint-disable prettier/prettier */
 /* eslint-disable no-undef */
-import chai, { assert, expect } from "chai";
+import chai, { expect } from "chai";
 import chaiAsPromised from "chai-as-promised";
 import { setTimeout } from "timers/promises";
 
 import {
   ORDER_STATUS,
   ORDER_SIDE,
-  MinifiedCandleStick,
+  // MinifiedCandleStick,
   ORDER_TYPE,
-} from "../submodules/library-sui/src";
-import {
-  bnStrToBaseNumber,
-  bigNumber,
-} from "../submodules/library-sui/src/library";
+} from "../submodules/library-sui";
+import { toBaseNumber, MinifiedCandleStick } from "../submodules/library-sui";
 import {
   BluefinClient,
   GetMarketRecentTradesResponse,
@@ -24,7 +21,7 @@ import {
   GetAccountDataResponse,
   TickerData,
 } from "../index";
-import { readFile, requestGas } from "../submodules/library-sui";
+import { Faucet } from "../submodules/library-sui";
 
 chai.use(chaiAsPromised);
 
@@ -38,8 +35,8 @@ const testSubAccKey =
 const testSubAccPubAddr =
   "0x7c550b81ce7f8f458f5520d55623eb5dd1013310323607c0c7b5c3625e47079e";
 
-requestGas(testAcctPubAddr);
-requestGas(testSubAccPubAddr);
+Faucet.requestSUI(testAcctPubAddr);
+Faucet.requestSUI(testSubAccPubAddr);
 
 let client: BluefinClient;
 
@@ -73,9 +70,9 @@ describe("BluefinClient", () => {
 
     // market data
     const marketData = await client.getMarketData(symbol);
-    if (marketData.data && bnStrToBaseNumber(marketData.data.marketPrice) > 0) {
-      marketPrice = bnStrToBaseNumber(marketData.data.marketPrice || "100"); // hard coding to 100 will remove once DAPI is live
-      indexPrice = bnStrToBaseNumber(marketData.data.indexPrice || "0");
+    if (marketData.data && toBaseNumber(marketData.data.marketPrice) > 0) {
+      marketPrice = toBaseNumber(marketData.data.marketPrice || "100"); // hard coding to 100 will remove once DAPI is live
+      indexPrice = toBaseNumber(marketData.data.indexPrice || "0");
       const percentChange = 3 / 100; // 3%
       buyPrice = Number((marketPrice - marketPrice * percentChange).toFixed(0));
       sellPrice = Number(
