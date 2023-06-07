@@ -2,8 +2,10 @@ import {
   address,
   ADJUST_MARGIN,
   Transaction,
-} from "../../submodules/library-sui/src";
-import { OnChainCalls } from "../../submodules/library-sui/src";
+  OnChainCalls,
+  toBigNumberStr,
+  toBaseNumber,
+} from "../../submodules/library-sui";
 import { RawSigner, SignerWithProvider, JsonRpcProvider } from "@mysten/sui.js";
 import {
   ResponseSchema,
@@ -11,7 +13,6 @@ import {
   TransformToResponseSchema,
 } from "./contractErrorHandling.service";
 import { default as interpolate } from "interpolate";
-import { toBigNumberStr, toBaseNumber } from "../../submodules/library-sui";
 
 export class ContractCalls {
   onChainCalls: OnChainCalls;
@@ -206,8 +207,11 @@ export class ContractCalls {
   getMarginBankBalance = async (): Promise<number> => {
     if (this.marginBankId) {
       return toBaseNumber(
-        (await this.onChainCalls.getBankAccountDetails(this.marginBankId))
-          .balance
+        (
+          await this.onChainCalls.getBankAccountDetailsUsingID(
+            this.marginBankId
+          )
+        ).balance
       );
     } else {
       return 0;

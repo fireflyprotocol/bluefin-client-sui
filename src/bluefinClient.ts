@@ -3,10 +3,14 @@ import { AwsKmsSigner } from "ethers-aws-kms-signer";
 import {
   toBigNumberStr,
   toBigNumber,
-  bnStrToBaseNumber,
   toBaseNumber,
   usdcToBaseNumber,
-} from "../submodules/library-sui/src/library";
+  DAPIKlineResponse,
+  MarketSymbol,
+  Order,
+  OrderSigner,
+  Transaction,
+} from "../submodules/library-sui";
 import {
   AdjustLeverageResponse,
   AuthorizeHashResponse,
@@ -64,24 +68,17 @@ import {
   SignerWithProvider,
 } from "@mysten/sui.js";
 import {
-  DAPIKlineResponse,
-  MarketSymbol,
-  Order,
-  OrderSigner,
-  Transaction,
-} from "../submodules/library-sui/src";
-import {
   ADJUST_MARGIN,
   MARGIN_TYPE,
   ORDER_SIDE,
   ORDER_STATUS,
   ORDER_TYPE,
   TIME_IN_FORCE,
-} from "../submodules/library-sui/src/enums";
+} from "../submodules/library-sui";
 import { generateRandomNumber, readFile } from "../utils/utils";
 import { ContractCalls } from "./exchange/contractService";
 import { ResponseSchema } from "./exchange/contractErrorHandling.service";
-import { OnboardingSigner } from "../submodules/library-sui/src/classes/onBoardSigner";
+import { OnboardingSigner } from "../submodules/library-sui";
 
 // import { Contract } from "ethers";
 
@@ -655,14 +652,14 @@ export class BluefinClient {
     });
     /// found accountDataByMarket
     if (accDataByMarket && accDataByMarket.length > 0) {
-      return bnStrToBaseNumber(accDataByMarket[0].selectedLeverage);
+      return toBaseNumber(accDataByMarket[0].selectedLeverage);
     }
     /// user is new and symbol data is not present in accountDataByMarket
     const exchangeInfo = await this.getExchangeInfo(symbol);
     if (!exchangeInfo.data) {
       throw Error(`Provided Market Symbol(${symbol}) does not exist`);
     }
-    return bnStrToBaseNumber(exchangeInfo.data.defaultLeverage);
+    return toBaseNumber(exchangeInfo.data.defaultLeverage);
   };
 
   /**
@@ -1075,6 +1072,7 @@ export class BluefinClient {
       postOnly: params.postOnly || false,
       salt,
       orderbookOnly: params.orderbookOnly || true,
+      ioc: params.ioc || false,
     };
   };
 
