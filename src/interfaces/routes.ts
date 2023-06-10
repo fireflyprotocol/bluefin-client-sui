@@ -8,7 +8,7 @@ import {
   MarketSymbol,
   address,
   Interval,
-} from "../../submodules/library-sui";
+} from "@firefly-exchange/library-sui";
 export interface GetTransactionHistoryRequest {
   symbol?: MarketSymbol; // will fetch orders of provided market
   pageSize?: number; // will get only provided number of orders must be <= 50
