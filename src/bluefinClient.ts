@@ -313,6 +313,7 @@ export class BluefinClient {
       maker: orderToSign.maker,
       orderSignature: signature,
       orderbookOnly: orderToSign.orderbookOnly,
+      timeInForce: order.timeInForce || TIME_IN_FORCE.GOOD_TILL_TIME,
     };
     return signedOrder;
   };
@@ -1072,7 +1073,7 @@ export class BluefinClient {
       postOnly: params.postOnly || false,
       salt,
       orderbookOnly: params.orderbookOnly || true,
-      ioc: params.ioc || false,
+      ioc: params.timeInForce == TIME_IN_FORCE.IMMEDIATE_OR_CANCEL || false,
     };
   };
 

@@ -51,7 +51,7 @@ export interface RequiredOrderFields {
   triggerPrice?: number; //optional, send triggerPrice for stop orders
   postOnly?: boolean; // true/false, default is false
   orderbookOnly?: boolean; // true/false, default is true
-  ioc?: boolean; // true/false, default is false
+  timeInForce?: TIME_IN_FORCE; // IOC/GTT by default all orders are GTT
 }
 
 export interface OrderSignatureRequest extends RequiredOrderFields {
@@ -73,12 +73,10 @@ export interface OrderSignatureResponse extends RequiredOrderFields {
 }
 
 export interface PlaceOrderRequest extends OrderSignatureResponse {
-  timeInForce?: TIME_IN_FORCE; // FOK/IOC/GTT by default all orders are GTT
   clientId?: string;
 }
 
 export interface PostOrderRequest extends OrderSignatureRequest {
-  timeInForce?: TIME_IN_FORCE;
   clientId?: string;
 }
 
