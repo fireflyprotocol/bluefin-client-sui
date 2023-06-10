@@ -10,7 +10,7 @@ import {
   Order,
   OrderSigner,
   Transaction,
-} from "../submodules/library-sui";
+} from "@firefly-exchange/library-sui";
 import {
   AdjustLeverageResponse,
   AuthorizeHashResponse,
@@ -74,11 +74,11 @@ import {
   ORDER_STATUS,
   ORDER_TYPE,
   TIME_IN_FORCE,
-} from "../submodules/library-sui";
+} from "@firefly-exchange/library-sui";
 import { generateRandomNumber, readFile } from "../utils/utils";
 import { ContractCalls } from "./exchange/contractService";
 import { ResponseSchema } from "./exchange/contractErrorHandling.service";
-import { OnboardingSigner } from "../submodules/library-sui";
+import { OnboardingSigner } from "@firefly-exchange/library-sui";
 
 // import { Contract } from "ethers";
 
