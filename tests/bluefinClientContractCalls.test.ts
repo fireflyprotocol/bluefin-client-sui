@@ -1,8 +1,7 @@
 /* eslint-disable prettier/prettier */
 /* eslint-disable no-undef */
-import chai, { assert, expect } from "chai";
+import chai, { expect } from "chai";
 import chaiAsPromised from "chai-as-promised";
-import { setTimeout } from "timers/promises";
 
 import {
   BASE_DECIMALS,
