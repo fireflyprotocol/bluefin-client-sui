@@ -8,10 +8,13 @@
 ### This is the dockerization of sui for integration tests
 
 ### How to build the image
+
 - run `docker:sui:build`
 
 ### How to run the container
+
 - run `docker:sui:run`
 
 ### How to annihilate the container
+
 - run `docker:sui:clean`
