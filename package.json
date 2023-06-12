@@ -8,7 +8,6 @@
     "test": "ts-mocha --timeout 100000 tests/*.test.ts",
     "prepare": "husky install",
     "debug": "ts-node ./scripts/myDebuger.ts",
-    "generate:dapi": "rm -rf src/gen/dapi && openapi-generator-cli generate -i swagger/swagger.json -g typescript-axios -o src/gen/dapi --additional-properties=useSingleRequestParameter=true --skip-validate-spec",
     "lint": "yarn eslint --fix --cache --max-warnings=-1 .",
     "format-all": "yarn prettier --write .",
     "format-staged": "git-format-staged -f \"prettier '{}'\" '**/*.js' '**/*.json' '**/*.ts' ",
