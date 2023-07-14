@@ -10,7 +10,23 @@ import {
   Order,
   OrderSigner,
   Transaction,
+  ADJUST_MARGIN,
+  MARGIN_TYPE,
+  ORDER_SIDE,
+  ORDER_STATUS,
+  ORDER_TYPE,
+  TIME_IN_FORCE,
+  OnboardingSigner,
 } from "@firefly-exchange/library-sui";
+import {
+  Connection,
+  Ed25519Keypair,
+  JsonRpcProvider,
+  Keypair,
+  RawSigner,
+  Secp256k1Keypair,
+  SignerWithProvider,
+} from "@mysten/sui.js";
 import {
   AdjustLeverageResponse,
   AuthorizeHashResponse,
@@ -58,46 +74,33 @@ import { SERVICE_URLS } from "./exchange/apiUrls";
 import { Sockets } from "./exchange/sockets";
 import { ExtendedNetwork, Networks } from "./constants";
 import { WebSockets } from "./exchange/WebSocket";
-import {
-  Connection,
-  Ed25519Keypair,
-  JsonRpcProvider,
-  Keypair,
-  RawSigner,
-  Secp256k1Keypair,
-  SignerWithProvider,
-} from "@mysten/sui.js";
-import {
-  ADJUST_MARGIN,
-  MARGIN_TYPE,
-  ORDER_SIDE,
-  ORDER_STATUS,
-  ORDER_TYPE,
-  TIME_IN_FORCE,
-} from "@firefly-exchange/library-sui";
 import { generateRandomNumber, readFile } from "../utils/utils";
 import { ContractCalls } from "./exchange/contractService";
 import { ResponseSchema } from "./exchange/contractErrorHandling.service";
-import { OnboardingSigner } from "@firefly-exchange/library-sui";
 
 // import { Contract } from "ethers";
 
 export class BluefinClient {
   protected readonly network: ExtendedNetwork;
 
-  private orderSigner: OrderSigner | undefined;
+  private orderSigner: OrderSigner | any;
 
   private apiService: APIService;
+
   public sockets: Sockets;
+
   public webSockets: WebSockets | undefined;
+
   public kmsSigner: AwsKmsSigner | undefined;
 
   public marketSymbols: string[] = []; // to save array market symbols [DOT-PERP, SOL-PERP]
 
   private walletAddress = ""; // to save user's public address when connecting from UI
 
-  private signer: RawSigner | undefined; // to save signer when connecting from UI
+  private signer: RawSigner | any; // to save signer when connecting from UI
+
   private contractCalls: ContractCalls | undefined;
+
   private provider: any | undefined; // to save raw web3 provider when connecting from UI
 
   private isTermAccepted = false;
@@ -106,6 +109,7 @@ export class BluefinClient {
 
   // the number of decimals supported by USDC contract
   private MarginTokenPrecision = 6;
+
   /**
    * initializes the class instance
    * @param _isTermAccepted boolean indicating if exchange terms and conditions are accepted
@@ -117,11 +121,14 @@ export class BluefinClient {
     _isTermAccepted: boolean,
     _network: ExtendedNetwork,
     _account?: string | Keypair | AwsKmsSigner,
-    _scheme?: any
+    _scheme?: any,
+    _isUI?: boolean,
+    _uiSignerObject?: any
   ) {
     this.network = _network;
+
     this.provider = new JsonRpcProvider(
-      new Connection({ fullnode: _network.rpc })
+      new Connection({ fullnode: _network.url })
     );
 
     this.apiService = new APIService(this.network.apiGateway);
@@ -132,8 +139,12 @@ export class BluefinClient {
     }
 
     this.isTermAccepted = _isTermAccepted;
-    //if input is string then its seed phrase else it should be AwsKmsSigner object
-    if (_account && _scheme && typeof _account == "string") {
+
+    if (_isUI){
+      this.initializeWithHook(_uiSignerObject);
+    }
+    // if input is string then its seed phrase else it should be AwsKmsSigner object
+    else if (_account && _scheme && typeof _account === "string") {
       this.initializeWithSeed(_account, _scheme);
     } else if (
       _account &&
@@ -162,6 +173,18 @@ export class BluefinClient {
     }
   };
 
+  initializeWithHook= async(uiSignerObject: any): Promise<void> => {
+    try{
+      this.signer=uiSignerObject;
+      this.orderSigner=uiSignerObject;
+      this.walletAddress=this.signer.getAddress();
+
+    }catch(err){
+      console.log(err);
+      throw Error("Failed to initialize through UI");
+    }
+  }
+
   /**
    * @description
    * initializes client with AwsKmsSigner object
@@ -171,7 +194,7 @@ export class BluefinClient {
   initializeWithKMS = async (awsKmsSigner: AwsKmsSigner): Promise<void> => {
     try {
       this.kmsSigner = awsKmsSigner;
-      //fetching public address of the account
+      // fetching public address of the account
       this.walletAddress = await this.kmsSigner.getAddress();
     } catch (err) {
       console.log(err);
@@ -246,6 +269,7 @@ export class BluefinClient {
     }
     return this.signer;
   };
+
   /**
    * @description
    * Gets the RPC Provider of the client
@@ -369,6 +393,7 @@ export class BluefinClient {
 
     return response;
   };
+
   /**
    * @description
    * Creates signature for cancelling orders
@@ -464,26 +489,25 @@ export class BluefinClient {
     if (amount) {
       const coin =
         await this.contractCalls.onChainCalls.getUSDCoinHavingBalance({
-          amount: amount,
+          amount,
           address: await this.signer.getAddress(),
           currencyID: this.contractCalls.onChainCalls.getCurrencyID(),
-          limit: limit,
-          cursor: cursor,
+          limit,
+          cursor,
         });
       if (coin) {
         coin.balance = usdcToBaseNumber(coin.balance);
       }
       return coin;
-    } else {
-      const coins = await this.contractCalls.onChainCalls.getUSDCCoins({
-        address: await this.signer.getAddress(),
-      });
-      coins.data.forEach((coin) => {
-        coin.balance = usdcToBaseNumber(coin.balance);
-      });
-
-      return coins;
     }
+    const coins = await this.contractCalls.onChainCalls.getUSDCCoins({
+      address: await this.signer.getAddress(),
+    });
+    coins.data.forEach((coin) => {
+      coin.balance = usdcToBaseNumber(coin.balance);
+    });
+
+    return coins;
   };
 
   /**
@@ -530,9 +554,8 @@ export class BluefinClient {
     });
     if (Transaction.getStatus(txResponse) == "success") {
       return true;
-    } else {
-      return false;
     }
+    return false;
   };
 
   /**
@@ -589,7 +612,7 @@ export class BluefinClient {
     if (amount && !coinID) {
       coin = (
         await this.contractCalls.onChainCalls.getUSDCoinHavingBalance({
-          amount: amount,
+          amount,
         })
       )?.coinObjectId;
     }
@@ -598,9 +621,8 @@ export class BluefinClient {
         amount,
         coin
       );
-    } else {
-      throw Error(`User has no coin with amount ${amount} to deposit`);
     }
+    throw Error(`User has no coin with amount ${amount} to deposit`);
   };
 
   /**
@@ -614,9 +636,8 @@ export class BluefinClient {
       return await this.contractCalls.withdrawFromMarginBankContractCall(
         amount
       );
-    } else {
-      return await this.contractCalls.withdrawAllFromMarginBankContractCall();
     }
+    return await this.contractCalls.withdrawAllFromMarginBankContractCall();
   };
 
   /**
@@ -1063,9 +1084,7 @@ export class BluefinClient {
       isBuy: params.side === ORDER_SIDE.BUY,
       quantity: toBigNumber(params.quantity),
       leverage: toBigNumber(params.leverage || 1),
-      maker: parentAddress
-        ? parentAddress
-        : this.getPublicAddress().toLocaleLowerCase(),
+      maker: parentAddress || this.getPublicAddress().toLocaleLowerCase(),
       reduceOnly: params.reduceOnly || false,
       expiration: toBigNumber(
         params.expiration || Math.floor(expiration.getTime() / 1000)
