@@ -11,7 +11,26 @@ import {
   OrderSigner,
   Transaction,
   bigNumber,
+  ADJUST_MARGIN,
+  MARGIN_TYPE,
+  ORDER_SIDE,
+  ORDER_STATUS,
+  ORDER_TYPE,
+  TIME_IN_FORCE,
+  OnboardingSigner,
+  hexToBuffer,
+  bnToHex,
+  encodeOrderFlags,
 } from "@firefly-exchange/library-sui";
+import {
+  Connection,
+  Ed25519Keypair,
+  JsonRpcProvider,
+  Keypair,
+  RawSigner,
+  Secp256k1Keypair,
+  SignerWithProvider,
+} from "@mysten/sui.js";
 import {
   AdjustLeverageResponse,
   AuthorizeHashResponse,
@@ -59,46 +78,33 @@ import { SERVICE_URLS } from "./exchange/apiUrls";
 import { Sockets } from "./exchange/sockets";
 import { ExtendedNetwork, Networks } from "./constants";
 import { WebSockets } from "./exchange/WebSocket";
-import {
-  Connection,
-  Ed25519Keypair,
-  JsonRpcProvider,
-  Keypair,
-  RawSigner,
-  Secp256k1Keypair,
-  SignerWithProvider,
-} from "@mysten/sui.js";
-import {
-  ADJUST_MARGIN,
-  MARGIN_TYPE,
-  ORDER_SIDE,
-  ORDER_STATUS,
-  ORDER_TYPE,
-  TIME_IN_FORCE,
-} from "@firefly-exchange/library-sui";
 import { generateRandomNumber, readFile } from "../utils/utils";
 import { ContractCalls } from "./exchange/contractService";
 import { ResponseSchema } from "./exchange/contractErrorHandling.service";
-import { OnboardingSigner } from "@firefly-exchange/library-sui";
 
 // import { Contract } from "ethers";
 
 export class BluefinClient {
   protected readonly network: ExtendedNetwork;
 
-  private orderSigner: OrderSigner | undefined;
+  private orderSigner: OrderSigner | any;
 
   private apiService: APIService;
+
   public sockets: Sockets;
+
   public webSockets: WebSockets | undefined;
+
   public kmsSigner: AwsKmsSigner | undefined;
 
   public marketSymbols: string[] = []; // to save array market symbols [DOT-PERP, SOL-PERP]
 
   private walletAddress = ""; // to save user's public address when connecting from UI
 
-  private signer: RawSigner | undefined; // to save signer when connecting from UI
+  private signer: RawSigner | any; // to save signer when connecting from UI
+
   private contractCalls: ContractCalls | undefined;
+
   private provider: any | undefined; // to save raw web3 provider when connecting from UI
 
   private isTermAccepted = false;
@@ -107,6 +113,7 @@ export class BluefinClient {
 
   // the number of decimals supported by USDC contract
   private MarginTokenPrecision = 6;
+
   /**
    * initializes the class instance
    * @param _isTermAccepted boolean indicating if exchange terms and conditions are accepted
@@ -118,11 +125,14 @@ export class BluefinClient {
     _isTermAccepted: boolean,
     _network: ExtendedNetwork,
     _account?: string | Keypair | AwsKmsSigner,
-    _scheme?: any
+    _scheme?: any,
+    _isUI?: boolean,
+    _uiSignerObject?: any
   ) {
     this.network = _network;
+
     this.provider = new JsonRpcProvider(
-      new Connection({ fullnode: _network.rpc })
+      new Connection({ fullnode: _network.url })
     );
 
     this.apiService = new APIService(this.network.apiGateway);
@@ -133,8 +143,12 @@ export class BluefinClient {
     }
 
     this.isTermAccepted = _isTermAccepted;
-    //if input is string then its seed phrase else it should be AwsKmsSigner object
-    if (_account && _scheme && typeof _account == "string") {
+
+    if (_isUI) {
+      this.initializeWithHook(_uiSignerObject);
+    }
+    // if input is string then its seed phrase else it should be AwsKmsSigner object
+    else if (_account && _scheme && typeof _account === "string") {
       this.initializeWithSeed(_account, _scheme);
     } else if (
       _account &&
@@ -163,6 +177,17 @@ export class BluefinClient {
     }
   };
 
+  initializeWithHook = async (uiSignerObject: any): Promise<void> => {
+    try {
+      this.signer = uiSignerObject;
+      this.orderSigner = uiSignerObject;
+      this.walletAddress = this.signer.getAddress();
+    } catch (err) {
+      console.log(err);
+      throw Error("Failed to initialize through UI");
+    }
+  };
+
   /**
    * @description
    * initializes client with AwsKmsSigner object
@@ -172,7 +197,7 @@ export class BluefinClient {
   initializeWithKMS = async (awsKmsSigner: AwsKmsSigner): Promise<void> => {
     try {
       this.kmsSigner = awsKmsSigner;
-      //fetching public address of the account
+      // fetching public address of the account
       this.walletAddress = await this.kmsSigner.getAddress();
     } catch (err) {
       console.log(err);
@@ -229,6 +254,7 @@ export class BluefinClient {
       throw Error("Signer not Initialized");
     }
     const _deployment = deployment || this.getDeploymentJson();
+
     this.contractCalls = new ContractCalls(
       this.getSigner(),
       this.getProvider(),
@@ -247,6 +273,7 @@ export class BluefinClient {
     }
     return this.signer;
   };
+
   /**
    * @description
    * Gets the RPC Provider of the client
@@ -254,6 +281,57 @@ export class BluefinClient {
    * */
   getProvider = (): JsonRpcProvider => {
     return this.provider;
+  };
+
+  /**
+   * @description
+   * Creates message to be signed, creates signature and authorize it from dapi
+   * @returns auth token
+   */
+  userOnBoarding = async (token?: string) => {
+    let userAuthToken = token;
+    if (!userAuthToken) {
+      let signature: string;
+
+      if (this.kmsSigner !== undefined) {
+        // const hashedMessageSHA = sha256(
+        //   hexToBuffer(this.network.onboardingUrl)
+        // );
+        // /*
+        //   For every orderHash sent to etherium etherium will hash it and wrap
+        //   it with "\\x19Ethereum Signed Message:\\n" + message.length + message
+        //   Hence for that we have to hash it again.
+        // */
+        // //@ts-ignore
+        // const hashedMessageETH =
+        // this.signer.signData(hashedMessageSHA);
+        // (signature = await this.kmsSigner._signDigest(hashedMessageETH));
+      } else {
+        // sign onboarding message
+        signature = await OnboardingSigner.createOnboardSignature(
+          this.network.onboardingUrl,
+          this.signer
+        );
+      }
+
+      // authorize signature created by dAPI
+      const authTokenResponse = await this.authorizeSignedHash(signature);
+
+      if (!authTokenResponse.ok || !authTokenResponse.data) {
+        throw Error(
+          `Authorization error: ${authTokenResponse.response.message}`
+        );
+      }
+      userAuthToken = authTokenResponse.data.token;
+    }
+    // for api
+    this.apiService.setAuthToken(userAuthToken);
+    // this.apiService.setWalletAddress(this.getPublicAddress());
+    // for socket
+    this.sockets.setAuthToken(userAuthToken);
+    this.webSockets?.setAuthToken(userAuthToken);
+    // TODO: remove this when all endpoints on frontend are integrated from client library
+    return userAuthToken;
   };
 
   /**
@@ -287,14 +365,39 @@ export class BluefinClient {
    * @param order OrderSignatureRequest
    * */
 
-  createSignedOrder = (
+  getSerializedOrder(order: Order): string {
+    // encode order flags
+    const orderFlags = encodeOrderFlags(order);
+
+    const buffer = Buffer.alloc(144);
+    buffer.set(hexToBuffer(bnToHex(order.price)), 0);
+    buffer.set(hexToBuffer(bnToHex(order.quantity)), 16);
+    buffer.set(hexToBuffer(bnToHex(order.leverage)), 32);
+    buffer.set(hexToBuffer(bnToHex(order.salt)), 48);
+    buffer.set(hexToBuffer(bnToHex(order.expiration, 16)), 64);
+    buffer.set(hexToBuffer(order.maker), 72);
+    buffer.set(hexToBuffer(order.market), 104);
+    buffer.set(hexToBuffer(bnToHex(orderFlags, 2)), 136);
+    buffer.set(Buffer.from("Bluefin", "utf8"), 137);
+
+    return buffer.toString("hex");
+  }
+
+  signOrder = async (orderToSign: Order) => {
+    const serializedOrder = new TextEncoder().encode(
+      this.getSerializedOrder(orderToSign)
+    );
+    return this.signer.signData(serializedOrder);
+  };
+
+  createSignedOrder = async (
     order: OrderSignatureRequest
-  ): OrderSignatureResponse => {
+  ): Promise<OrderSignatureResponse> => {
     if (!this.orderSigner) {
       throw Error("Order Signer not initialized");
     }
     const orderToSign: Order = this.createOrderToSign(order);
-    const signature = this.orderSigner.signOrder(orderToSign);
+    const signature = await this.signOrder(orderToSign);
     const signedOrder: OrderSignatureResponse = {
       symbol: order.symbol,
       price: order.price,
@@ -342,6 +445,7 @@ export class BluefinClient {
         expiration: params.expiration,
         orderSignature: params.orderSignature,
         timeInForce: params.timeInForce || TIME_IN_FORCE.GOOD_TILL_TIME,
+        orderbookOnly: true,
         postOnly: params.postOnly || false,
         clientId: params.clientId
           ? `bluefin-client: ${params.clientId}`
@@ -360,16 +464,18 @@ export class BluefinClient {
    * @returns PlaceOrderResponse
    */
   postOrder = async (params: PostOrderRequest) => {
-    const signedOrder = this.createSignedOrder(params);
+    const signedOrder = await this.createSignedOrder(params);
     const response = await this.placeSignedOrder({
       ...signedOrder,
       timeInForce: params.timeInForce,
       postOnly: params.postOnly,
       clientId: params.clientId,
+      orderbookOnly: true,
     });
 
     return response;
   };
+
   /**
    * @description
    * Creates signature for cancelling orders
@@ -465,26 +571,25 @@ export class BluefinClient {
     if (amount) {
       const coin =
         await this.contractCalls.onChainCalls.getUSDCoinHavingBalance({
-          amount: amount,
+          amount,
           address: await this.signer.getAddress(),
           currencyID: this.contractCalls.onChainCalls.getCurrencyID(),
-          limit: limit,
-          cursor: cursor,
+          limit,
+          cursor,
         });
       if (coin) {
         coin.balance = usdcToBaseNumber(coin.balance);
       }
       return coin;
-    } else {
-      const coins = await this.contractCalls.onChainCalls.getUSDCCoins({
-        address: await this.signer.getAddress(),
-      });
-      coins.data.forEach((coin) => {
-        coin.balance = usdcToBaseNumber(coin.balance);
-      });
-
-      return coins;
     }
+    const coins = await this.contractCalls.onChainCalls.getUSDCCoins({
+      address: await this.signer.getAddress(),
+    });
+    coins.data.forEach((coin) => {
+      coin.balance = usdcToBaseNumber(coin.balance);
+    });
+
+    return coins;
   };
 
   /**
@@ -494,7 +599,7 @@ export class BluefinClient {
    * @returns Number representing balance of user in Margin Bank contract
    */
   getMarginBankBalance = async (): Promise<number> => {
-    return await this.contractCalls.getMarginBankBalance();
+    return this.contractCalls.getMarginBankBalance();
   };
 
   /**
@@ -503,7 +608,7 @@ export class BluefinClient {
    * @returns Number representing balance of user in USDC contract
    */
   getUSDCBalance = async (): Promise<number> => {
-    return await this.contractCalls.onChainCalls.getUSDCBalance(
+    return this.contractCalls.onChainCalls.getUSDCBalance(
       {
         address: await this.signer.getAddress(),
         currencyID: this.contractCalls.onChainCalls.getCurrencyID(),
@@ -529,11 +634,10 @@ export class BluefinClient {
       to: await this.signer.getAddress(),
       gasBudget: 1000000000,
     });
-    if (Transaction.getStatus(txResponse) == "success") {
+    if (Transaction.getStatus(txResponse) === "success") {
       return true;
-    } else {
-      return false;
     }
+    return false;
   };
 
   /**
@@ -547,7 +651,7 @@ export class BluefinClient {
     params: adjustLeverageRequest
   ): Promise<ResponseSchema> => {
     // TODO: Add Dapi checks and adjust leverage on dapi once dapi is up
-    return await this.contractCalls.adjustLeverageContractCall(
+    return this.contractCalls.adjustLeverageContractCall(
       params.leverage,
       params.symbol,
       params.parentAddress
@@ -568,7 +672,7 @@ export class BluefinClient {
     operationType: ADJUST_MARGIN,
     amount: number
   ): Promise<ResponseSchema> => {
-    return await this.contractCalls.adjustMarginContractCall(
+    return this.contractCalls.adjustMarginContractCall(
       symbol,
       operationType,
       amount
@@ -590,18 +694,14 @@ export class BluefinClient {
     if (amount && !coinID) {
       coin = (
         await this.contractCalls.onChainCalls.getUSDCoinHavingBalance({
-          amount: amount,
+          amount,
         })
       )?.coinObjectId;
     }
     if (coin) {
-      return await this.contractCalls.depositToMarginBankContractCall(
-        amount,
-        coin
-      );
-    } else {
-      throw Error(`User has no coin with amount ${amount} to deposit`);
+      return this.contractCalls.depositToMarginBankContractCall(amount, coin);
     }
+    throw Error(`User has no coin with amount ${amount} to deposit`);
   };
 
   /**
@@ -612,12 +712,9 @@ export class BluefinClient {
    */
   withdrawFromMarginBank = async (amount?: number): Promise<ResponseSchema> => {
     if (amount) {
-      return await this.contractCalls.withdrawFromMarginBankContractCall(
-        amount
-      );
-    } else {
-      return await this.contractCalls.withdrawAllFromMarginBankContractCall();
+      return this.contractCalls.withdrawFromMarginBankContractCall(amount);
     }
+    return this.contractCalls.withdrawAllFromMarginBankContractCall();
   };
 
   /**
@@ -631,7 +728,7 @@ export class BluefinClient {
     publicAddress: string,
     status: boolean
   ): Promise<ResponseSchema> => {
-    return await this.contractCalls.setSubAccount(publicAddress, status);
+    return this.contractCalls.setSubAccount(publicAddress, status);
   };
 
   /**
@@ -962,56 +1059,6 @@ export class BluefinClient {
     return response;
   };
 
-  /**
-   * @description
-   * Creates message to be signed, creates signature and authorize it from dapi
-   * @returns auth token
-   */
-  userOnBoarding = async (token?: string) => {
-    let userAuthToken = token;
-    if (!userAuthToken) {
-      let signature: string;
-
-      if (this.kmsSigner !== undefined) {
-        // const hashedMessageSHA = sha256(
-        //   hexToBuffer(this.network.onboardingUrl)
-        // );
-        // /*
-        //   For every orderHash sent to etherium etherium will hash it and wrap
-        //   it with "\\x19Ethereum Signed Message:\\n" + message.length + message
-        //   Hence for that we have to hash it again.
-        // */
-        // //@ts-ignore
-        // const hashedMessageETH =
-        // this.signer.signData(hashedMessageSHA);
-        // (signature = await this.kmsSigner._signDigest(hashedMessageETH));
-      } else {
-        // sign onboarding message
-        signature = await OnboardingSigner.createOnboardSignature(
-          this.network.onboardingUrl,
-          this.signer
-        );
-      }
-      // authorize signature created by dAPI
-      const authTokenResponse = await this.authorizeSignedHash(signature);
-
-      if (!authTokenResponse.ok || !authTokenResponse.data) {
-        throw Error(
-          `Authorization error: ${authTokenResponse.response.message}`
-        );
-      }
-      userAuthToken = authTokenResponse.data.token;
-    }
-    // for api
-    this.apiService.setAuthToken(userAuthToken);
-    // this.apiService.setWalletAddress(this.getPublicAddress());
-    // for socket
-    this.sockets.setAuthToken(userAuthToken);
-    this.webSockets?.setAuthToken(userAuthToken);
-    // TODO: remove this when all endpoints on frontend are integrated from client library
-    return userAuthToken;
-  };
-
   //= ==============================================================//
   //                    PRIVATE HELPER FUNCTIONS
   //= ==============================================================//
@@ -1064,9 +1111,7 @@ export class BluefinClient {
       isBuy: params.side === ORDER_SIDE.BUY,
       quantity: toBigNumber(params.quantity),
       leverage: toBigNumber(params.leverage || 1),
-      maker: parentAddress
-        ? parentAddress
-        : this.getPublicAddress().toLocaleLowerCase(),
+      maker: parentAddress || this.getPublicAddress().toLocaleLowerCase(),
       reduceOnly: params.reduceOnly || false,
       expiration: bigNumber(
         params.expiration || Math.floor(expiration.getTime() / 1000)
@@ -1074,7 +1119,7 @@ export class BluefinClient {
       postOnly: params.postOnly || false,
       salt,
       orderbookOnly: params.orderbookOnly || true,
-      ioc: params.timeInForce == TIME_IN_FORCE.IMMEDIATE_OR_CANCEL || false,
+      ioc: params.timeInForce === TIME_IN_FORCE.IMMEDIATE_OR_CANCEL || false,
     };
   };
 
@@ -1129,7 +1174,7 @@ export class BluefinClient {
       { isAuthenticationRequired: true },
       this.network.dmsURL
     );
-    if (response.status == 503) {
+    if (response.status === 503) {
       throw Error(
         `Cancel on Disconnect (dead-mans-switch) feature is currently unavailable`
       );
@@ -1155,7 +1200,7 @@ export class BluefinClient {
       { isAuthenticationRequired: true },
       this.network.dmsURL
     );
-    if (response.status == 503) {
+    if (response.status === 503) {
       throw Error(
         `Cancel on Disconnect (dead-mans-switch) feature is currently unavailable`
       );
