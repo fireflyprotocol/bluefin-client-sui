@@ -10,6 +10,7 @@ import {
   Order,
   OrderSigner,
   Transaction,
+  bigNumber,
 } from "@firefly-exchange/library-sui";
 import {
   AdjustLeverageResponse,
@@ -1055,8 +1056,8 @@ export class BluefinClient {
     }
     const salt =
       params.salt && params.salt < this.maxSaltLimit
-        ? toBigNumber(params.salt)
-        : toBigNumber(generateRandomNumber(1_000));
+        ? bigNumber(params.salt)
+        : bigNumber(generateRandomNumber(1_000));
     return {
       market: this.contractCalls.onChainCalls.getPerpetualID(params.symbol),
       price: toBigNumber(params.price),
@@ -1067,7 +1068,7 @@ export class BluefinClient {
         ? parentAddress
         : this.getPublicAddress().toLocaleLowerCase(),
       reduceOnly: params.reduceOnly || false,
-      expiration: toBigNumber(
+      expiration: bigNumber(
         params.expiration || Math.floor(expiration.getTime() / 1000)
       ), // /1000 to convert time in seconds
       postOnly: params.postOnly || false,
