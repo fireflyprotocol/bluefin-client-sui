@@ -289,6 +289,7 @@ export class BluefinClient {
    * @returns auth token
    */
   userOnBoarding = async (token?: string) => {
+    console.log("OB SIGNER", this.network.onboardingUrl);
     let userAuthToken = token;
     if (!userAuthToken) {
       let signature: string;
@@ -308,6 +309,7 @@ export class BluefinClient {
         // (signature = await this.kmsSigner._signDigest(hashedMessageETH));
       } else {
         // sign onboarding message
+
         signature = await OnboardingSigner.createOnboardSignature(
           this.network.onboardingUrl,
           this.signer
@@ -485,8 +487,9 @@ export class BluefinClient {
   createOrderCancellationSignature = async (
     params: OrderCancelSignatureRequest
   ): Promise<string> => {
-    // TODO: once signed cancel order method added to library-sui, implement this
-    return "";
+    // TODO: serialize correctly, this is the default method from suiet wallet docs
+    const serialized = new TextEncoder().encode(JSON.stringify(params));
+    return this.signer.signData(serialized);
   };
 
   /**
@@ -650,12 +653,34 @@ export class BluefinClient {
   adjustLeverage = async (
     params: adjustLeverageRequest
   ): Promise<ResponseSchema> => {
-    // TODO: Add Dapi checks and adjust leverage on dapi once dapi is up
-    return this.contractCalls.adjustLeverageContractCall(
-      params.leverage,
-      params.symbol,
-      params.parentAddress
-    );
+    const userPosition = await this.getUserPosition({
+      symbol: params.symbol,
+      parentAddress: params.parentAddress,
+    });
+    if (!userPosition.data) {
+      throw Error(`User positions data doesn't exist`);
+    }
+
+    const position = userPosition.data as any as GetPositionResponse;
+
+    if (Object.keys(position).length > 0) {
+      return this.contractCalls.adjustLeverageContractCall(
+        params.leverage,
+        params.symbol,
+        params.parentAddress
+      );
+    }
+    const {
+      ok,
+      data,
+      response: { errorCode, message },
+    } = await this.updateLeverage({
+      symbol: params.symbol,
+      leverage: params.leverage,
+      parentAddress: params.parentAddress,
+    });
+    const response: ResponseSchema = { ok, data, code: errorCode, message };
+    return response;
   };
 
   /**
