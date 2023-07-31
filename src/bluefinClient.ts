@@ -289,7 +289,6 @@ export class BluefinClient {
    * @returns auth token
    */
   userOnBoarding = async (token?: string) => {
-    console.log("OB SIGNER", this.network.onboardingUrl);
     let userAuthToken = token;
     if (!userAuthToken) {
       let signature: string;
