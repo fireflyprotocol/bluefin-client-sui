@@ -399,7 +399,13 @@ export class BluefinClient {
       throw Error("Order Signer not initialized");
     }
     const orderToSign: Order = this.createOrderToSign(order);
-    const signature = await this.signOrder(orderToSign);
+    let signature = "";
+    try {
+      signature = await this.signOrder(orderToSign);
+    } catch (e) {
+      throw Error("Failed to Sign Order: User Rejected Signature");
+    }
+
     const signedOrder: OrderSignatureResponse = {
       symbol: order.symbol,
       price: order.price,
