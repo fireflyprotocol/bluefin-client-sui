@@ -1187,7 +1187,7 @@ export class BluefinClient {
         address: params.parentAddress
           ? params.parentAddress
           : this.getPublicAddress(),
-        leverage: toBigNumberStr(params.leverage),
+        leverage: toBigNumberStr(params.leverage, 18),
         marginType: MARGIN_TYPE.ISOLATED,
       },
       { isAuthenticationRequired: true }
