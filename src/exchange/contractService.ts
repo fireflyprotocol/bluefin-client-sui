@@ -26,7 +26,10 @@ export class ContractCalls {
   constructor(signer: RawSigner, rpc: JsonRpcProvider, deployment: any) {
     this.signer = signer;
     const signerWithProvider = this.signer.signData;
-    this.onChainCalls = new OnChainCalls(signerWithProvider, deployment);
+    this.onChainCalls = new OnChainCalls(
+      signerWithProvider as unknown as RawSigner,
+      deployment
+    );
   }
 
   /**
@@ -126,6 +129,7 @@ export class ContractCalls {
           perpID: perpId,
           account: parentAddress || (await this.signer.getAddress()),
           gasBudget: gasLimit || this.defaultGas,
+          market: symbol,
         },
         this.signer
       );
