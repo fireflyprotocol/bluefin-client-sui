@@ -318,13 +318,16 @@ export class BluefinClient {
       } else {
         // sign onboarding message
         // eslint-disable-next-line no-lonely-if
+        const onboardingSignature = {
+          onboardingUrl: this.network.onboardingUrl,
+        };
         if (this.uiWallet) {
           signature = await OrderSigner.signPayloadUsingWallet(
-            { onboardingUrl: this.network.onboardingUrl },
+            onboardingSignature,
             this.uiWallet
           );
         } else {
-          signature = this.orderSigner.signPayload(this.network.onboardingUrl);
+          signature = this.orderSigner.signPayload(onboardingSignature);
         }
       }
 
