@@ -418,9 +418,7 @@ export class BluefinClient {
     const orderToSign: Order = this.createOrderToSign(order);
     let signature: SigPK;
     try {
-      if (this.uiWallet) {
-        signature = await this.signOrder(orderToSign);
-      }
+      signature = await this.signOrder(orderToSign);
     } catch (e) {
       throw Error("Failed to Sign Order: User Rejected Signature");
     }
