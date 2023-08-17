@@ -300,7 +300,7 @@ export class BluefinClient {
   userOnBoarding = async (token?: string) => {
     let userAuthToken = token;
     if (!userAuthToken) {
-      let signature: string;
+      let signature: SigPK;
 
       if (this.kmsSigner !== undefined) {
         // const hashedMessageSHA = sha256(
@@ -317,15 +317,24 @@ export class BluefinClient {
         // (signature = await this.kmsSigner._signDigest(hashedMessageETH));
       } else {
         // sign onboarding message
-
-        signature = await OnboardingSigner.createOnboardSignature(
-          this.network.onboardingUrl,
-          this.signer
-        );
+        // eslint-disable-next-line no-lonely-if
+        if (this.uiWallet) {
+          signature = await OrderSigner.signPayloadUsingWallet(
+            this.network.onboardingUrl,
+            this.uiWallet
+          );
+        } else {
+          signature = this.orderSigner.signPayload(
+            this.network.onboardingUrl,
+            this.signer
+          );
+        }
       }
 
       // authorize signature created by dAPI
-      const authTokenResponse = await this.authorizeSignedHash(signature);
+      const authTokenResponse = await this.authorizeSignedHash(
+        `${signature?.signature}${signature?.publicKey}`
+      );
 
       if (!authTokenResponse.ok || !authTokenResponse.data) {
         throw Error(
