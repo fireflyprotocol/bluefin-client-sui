@@ -320,14 +320,11 @@ export class BluefinClient {
         // eslint-disable-next-line no-lonely-if
         if (this.uiWallet) {
           signature = await OrderSigner.signPayloadUsingWallet(
-            this.network.onboardingUrl,
+            { onboardingUrl: this.network.onboardingUrl },
             this.uiWallet
           );
         } else {
-          signature = this.orderSigner.signPayload(
-            this.network.onboardingUrl,
-            this.signer
-          );
+          signature = this.orderSigner.signPayload(this.network.onboardingUrl);
         }
       }
 
@@ -518,10 +515,26 @@ export class BluefinClient {
    */
   createOrderCancellationSignature = async (
     params: OrderCancelSignatureRequest
-  ): Promise<string> => {
+  ): Promise<SigPK> => {
     // TODO: serialize correctly, this is the default method from suiet wallet docs
-    const serialized = new TextEncoder().encode(JSON.stringify(params));
-    return this.signer.signData(serialized);
+    // const serialized = new TextEncoder().encode(JSON.stringify(params));
+    // return this.signer.signData(serialized);
+    try {
+      let signature: SigPK;
+      if (this.uiWallet) {
+        signature = await OrderSigner.signPayloadUsingWallet(
+          { orderHashes: params.hashes },
+          this.uiWallet
+        );
+      } else {
+        signature = this.orderSigner.signPayload({
+          orderHashes: params.hashes,
+        });
+      }
+      return signature;
+    } catch {
+      throw Error("Siging cancelled by user");
+    }
   };
 
   /**
@@ -557,7 +570,7 @@ export class BluefinClient {
     const signature = await this.createOrderCancellationSignature(params);
     const response = await this.placeCancelOrder({
       ...params,
-      signature,
+      signature: `${signature?.signature}${signature?.publicKey}`,
     });
     return response;
   };
