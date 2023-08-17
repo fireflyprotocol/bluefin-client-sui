@@ -22,7 +22,6 @@ import {
   bnToHex,
   encodeOrderFlags,
   SigPK,
-  parseSigPK,
 } from "@firefly-exchange/library-sui";
 import {
   Connection,
@@ -75,19 +74,17 @@ import {
   TickerData,
   adjustLeverageRequest,
   verifyDepositResponse,
+  ExtendedNetwork,
+  ExtendedWalletContextState,
 } from "./interfaces/routes";
 import { APIService } from "./exchange/apiService";
 import { SERVICE_URLS } from "./exchange/apiUrls";
 import { Sockets } from "./exchange/sockets";
-import {
-  ExtendedNetwork,
-  ExtendedWalletContextState,
-  Networks,
-} from "./constants";
 import { WebSockets } from "./exchange/WebSocket";
 import { generateRandomNumber, readFile } from "../utils/utils";
 import { ContractCalls } from "./exchange/contractService";
 import { ResponseSchema } from "./exchange/contractErrorHandling.service";
+import { Networks } from "./constants";
 
 // import { Contract } from "ethers";
 
@@ -192,7 +189,6 @@ export class BluefinClient {
   ): Promise<void> => {
     try {
       this.signer = uiSignerObject;
-      // this.orderSigner = uiSignerObject;
       this.walletAddress = this.signer.getAddress();
       this.uiWallet = uiSignerObject.wallet;
     } catch (err) {
@@ -398,17 +394,33 @@ export class BluefinClient {
   }
 
   signOrder = async (orderToSign: Order) => {
-    // ORDER SIGNING GOES HERE
-    return OrderSigner.signOrderUsingWallet(orderToSign, this.signer.wallet);
+    if (this.uiWallet) {
+      const signature = await OrderSigner.signOrderUsingWallet(
+        orderToSign,
+        this.uiWallet
+      );
+      return signature;
+    }
+    if (this.orderSigner) {
+      return this.orderSigner.signOrder(orderToSign);
+    }
+    throw Error(
+      "On of OrderSginer or uiWallet needs to be initilized before signing order "
+    );
   };
 
   createSignedOrder = async (
     order: OrderSignatureRequest
   ): Promise<OrderSignatureResponse> => {
+    if (!this.orderSigner && !this.uiWallet) {
+      throw Error("Order Signer not initialized");
+    }
     const orderToSign: Order = this.createOrderToSign(order);
-    let signature: SigPK;
+    let signature: SigPK | string;
     try {
-      signature = await this.signOrder(orderToSign);
+      if (this.uiWallet) {
+        signature = await this.signOrder(orderToSign);
+      }
     } catch (e) {
       throw Error("Failed to Sign Order: User Rejected Signature");
     }
@@ -430,7 +442,9 @@ export class BluefinClient {
       salt: Number(orderToSign.salt),
       expiration: Number(orderToSign.expiration),
       maker: orderToSign.maker,
-      orderSignature: `${signature.signature}${signature.publicKey}`,
+      orderSignature: this.uiWallet
+        ? `${(signature as SigPK)?.signature}${(signature as SigPK)?.publicKey}`
+        : (signature as string),
       orderbookOnly: orderToSign.orderbookOnly,
       timeInForce: order.timeInForce || TIME_IN_FORCE.GOOD_TILL_TIME,
     };
@@ -626,7 +640,7 @@ export class BluefinClient {
   getUSDCBalance = async (): Promise<number> => {
     return this.contractCalls.onChainCalls.getUSDCBalance(
       {
-        address: this.signer.getAddress(),
+        address: await this.signer.getAddress(),
         currencyID: this.contractCalls.onChainCalls.getCurrencyID(),
       },
       this.signer

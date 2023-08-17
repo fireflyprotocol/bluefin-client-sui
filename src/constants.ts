@@ -1,5 +1,4 @@
 // import { Network } from "@firefly-exchange/library-sui";
-import { WalletContextState, SuiProvider } from "@suiet/wallet-kit";
 
 export const Networks = {
   TESTNET_SUI: {
@@ -38,31 +37,3 @@ export const DEFAULT_PRECISION = 6;
 export const SUI_NETWROK = "sui";
 
 export const EXTRA_FEES = 10000;
-
-export interface Network {
-  name?: string;
-  rpc?: string;
-  faucet?: string;
-  url?: string;
-}
-
-// adding this here as it's temporary support for socket.io
-// adding this here as it's temporary support for socket.io
-export interface ExtendedNetwork extends Network {
-  apiGateway?: string; // making it optional for backward compatibility
-  socketURL?: string;
-  onboardingUrl?: string;
-  webSocketURL: string;
-  dmsURL?: string;
-}
-
-export interface ExtendedWalletContextState
-  extends Omit<WalletContextState, "signMessage"> {
-  wallet: WalletContextState;
-  provider: SuiProvider;
-  signData: (data: Uint8Array) => Promise<string>;
-  getAddress: () => string | undefined;
-  signMessage: (
-    data: Uint8Array
-  ) => Promise<{ messageBytes: string; signature: string }>;
-}

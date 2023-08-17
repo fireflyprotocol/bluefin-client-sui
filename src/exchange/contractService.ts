@@ -189,6 +189,7 @@ export class ContractCalls {
             amount,
             perpID: perpId,
             gasBudget: gasLimit || this.defaultGas,
+            market: symbol,
           },
           this.signer
         );
@@ -198,6 +199,7 @@ export class ContractCalls {
           amount,
           gasBudget: gasLimit,
           perpID: perpId,
+          market: symbol,
         },
         this.signer
       );
