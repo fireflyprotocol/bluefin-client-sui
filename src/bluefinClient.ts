@@ -416,7 +416,7 @@ export class BluefinClient {
       throw Error("Order Signer not initialized");
     }
     const orderToSign: Order = this.createOrderToSign(order);
-    let signature: SigPK | string;
+    let signature: SigPK;
     try {
       if (this.uiWallet) {
         signature = await this.signOrder(orderToSign);
@@ -442,9 +442,7 @@ export class BluefinClient {
       salt: Number(orderToSign.salt),
       expiration: Number(orderToSign.expiration),
       maker: orderToSign.maker,
-      orderSignature: this.uiWallet
-        ? `${(signature as SigPK)?.signature}${(signature as SigPK)?.publicKey}`
-        : (signature as string),
+      orderSignature: `${signature?.signature}${signature?.publicKey}`,
       orderbookOnly: orderToSign.orderbookOnly,
       timeInForce: order.timeInForce || TIME_IN_FORCE.GOOD_TILL_TIME,
     };
