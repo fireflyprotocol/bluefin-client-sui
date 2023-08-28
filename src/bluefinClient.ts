@@ -1159,7 +1159,7 @@ export class BluefinClient {
     try {
       // Fetch data from the given URL
       const response = await this.apiService.get<ConfigResponse>(
-        SERVICE_URLS.MARKET.CONFIG,
+        SERVICE_URLS.MARKET.CONFIG
       );
       // The data property of the response object contains our configuration
       return response.data.deployment;

@@ -12,7 +12,7 @@ export const SERVICE_URLS = {
     TICKER: "/ticker",
     MASTER_INFO: "/masterInfo",
     FUNDING_RATE: "/fundingRate",
-    CONFIG: "/config"
+    CONFIG: "/config",
   },
   USER: {
     USER_POSITIONS: "/userPosition",

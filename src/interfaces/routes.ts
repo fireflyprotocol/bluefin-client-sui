@@ -529,7 +529,7 @@ export interface ConfigResponse {
         };
       };
     };
-  }
+  };
 }
 
 export interface ObjectDetails {
