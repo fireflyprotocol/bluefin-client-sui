@@ -76,6 +76,7 @@ import {
   verifyDepositResponse,
   ExtendedNetwork,
   ExtendedWalletContextState,
+  ConfigResponse,
 } from "./interfaces/routes";
 import { APIService } from "./exchange/apiService";
 import { SERVICE_URLS } from "./exchange/apiUrls";
@@ -85,7 +86,6 @@ import { generateRandomNumber, readFile } from "../utils/utils";
 import { ContractCalls } from "./exchange/contractService";
 import { ResponseSchema } from "./exchange/contractErrorHandling.service";
 import { Networks } from "./constants";
-import axios from "axios";
 
 // import { Contract } from "ethers";
 
@@ -1156,18 +1156,11 @@ export class BluefinClient {
    * @returns deployment json
    * */
   private getDeploymentJson = async (): Promise<any> => {
-    const deployment = await this.fetchDeployment(
-      `${this.network.apiGateway}/config`
-    );
-    return deployment;
-  };
-
-  // Function to fetch configuration from a given URL
-  private async fetchDeployment(url: string) {
     try {
       // Fetch data from the given URL
-      const response = await axios.get(url);
-
+      const response = await this.apiService.get<ConfigResponse>(
+        SERVICE_URLS.MARKET.CONFIG,
+      );
       // The data property of the response object contains our configuration
       return response.data.deployment;
     } catch (error) {
@@ -1178,7 +1171,7 @@ export class BluefinClient {
         throw new Error(`An error occurred: ${error}`);
       }
     }
-  }
+  };
 
   /**
    * Private function to create order payload that is to be signed on-chain
