@@ -85,6 +85,7 @@ import { generateRandomNumber, readFile } from "../utils/utils";
 import { ContractCalls } from "./exchange/contractService";
 import { ResponseSchema } from "./exchange/contractErrorHandling.service";
 import { Networks } from "./constants";
+import axios from "axios";
 
 // import { Contract } from "ethers";
 
@@ -262,7 +263,7 @@ export class BluefinClient {
     if (!this.signer) {
       throw Error("Signer not Initialized");
     }
-    const _deployment = deployment || this.getDeploymentJson();
+    const _deployment = deployment || (await this.getDeploymentJson());
 
     this.contractCalls = new ContractCalls(
       this.getSigner(),
@@ -1154,10 +1155,30 @@ export class BluefinClient {
    * Gets deployment json from local file (will get from DAPI in future)
    * @returns deployment json
    * */
-  private getDeploymentJson = (): any => {
-    // will be fetched from DAPI, may be stored in configs table
-    return readFile("./deployment.json");
+  private getDeploymentJson = async (): Promise<any> => {
+    const deployment = await this.fetchDeployment(
+      `${this.network.apiGateway}/config`
+    );
+    return deployment;
   };
+
+  // Function to fetch configuration from a given URL
+  private async fetchDeployment(url: string) {
+    try {
+      // Fetch data from the given URL
+      const response = await axios.get(url);
+
+      // The data property of the response object contains our configuration
+      return response.data.deployment;
+    } catch (error) {
+      // If Axios threw an error, it will be stored in error.response
+      if (error.response) {
+        throw new Error(`Failed to fetch deployment: ${error.response.status}`);
+      } else {
+        throw new Error(`An error occurred: ${error}`);
+      }
+    }
+  }
 
   /**
    * Private function to create order payload that is to be signed on-chain
