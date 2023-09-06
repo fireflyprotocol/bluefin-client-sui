@@ -441,7 +441,7 @@ export class BluefinClient {
       orderType: order.orderType,
       triggerPrice:
         order.orderType === ORDER_TYPE.STOP_MARKET ||
-        order.orderType === ORDER_TYPE.LIMIT
+          order.orderType === ORDER_TYPE.LIMIT
           ? order.triggerPrice || 0
           : 0,
       postOnly: orderToSign.postOnly,
@@ -470,10 +470,10 @@ export class BluefinClient {
         symbol: params.symbol,
         userAddress: params.maker,
         orderType: params.orderType,
-        price: toBigNumberStr(params.price),
-        triggerPrice: toBigNumberStr(params.triggerPrice || "0"),
-        quantity: toBigNumberStr(params.quantity),
-        leverage: toBigNumberStr(params.leverage),
+        price: toBigNumberStr(params.price, 18),
+        triggerPrice: toBigNumberStr(params.triggerPrice || "0", 18),
+        quantity: toBigNumberStr(params.quantity, 18),
+        leverage: toBigNumberStr(params.leverage, 18),
         side: params.side,
         reduceOnly: params.reduceOnly,
         salt: params.salt,
@@ -519,7 +519,7 @@ export class BluefinClient {
    */
   createOrderCancellationSignature = async (
     params: OrderCancelSignatureRequest
-  ): Promise<SigPK> => {
+  ): Promise<string> => {
     // TODO: serialize correctly, this is the default method from suiet wallet docs
     // const serialized = new TextEncoder().encode(JSON.stringify(params));
     // return this.signer.signData(serialized);
@@ -535,7 +535,7 @@ export class BluefinClient {
           orderHashes: params.hashes,
         });
       }
-      return signature;
+      return `${signature?.signature}${signature?.publicKey}`;
     } catch {
       throw Error("Siging cancelled by user");
     }
@@ -574,7 +574,7 @@ export class BluefinClient {
     const signature = await this.createOrderCancellationSignature(params);
     const response = await this.placeCancelOrder({
       ...params,
-      signature: `${signature?.signature}${signature?.publicKey}`,
+      signature: signature,
     });
     return response;
   };
