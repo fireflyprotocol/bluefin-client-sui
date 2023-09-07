@@ -85,7 +85,7 @@ import { WebSockets } from "./exchange/WebSocket";
 import { generateRandomNumber, readFile } from "../utils/utils";
 import { ContractCalls } from "./exchange/contractService";
 import { ResponseSchema } from "./exchange/contractErrorHandling.service";
-import { Networks } from "./constants";
+import { Networks, POST_ORDER_BASE } from "./constants";
 
 // import { Contract } from "ethers";
 
@@ -470,10 +470,10 @@ export class BluefinClient {
         symbol: params.symbol,
         userAddress: params.maker,
         orderType: params.orderType,
-        price: toBigNumberStr(params.price, 18),
-        triggerPrice: toBigNumberStr(params.triggerPrice || "0", 18),
-        quantity: toBigNumberStr(params.quantity, 18),
-        leverage: toBigNumberStr(params.leverage, 18),
+        price: toBigNumberStr(params.price, POST_ORDER_BASE),
+        triggerPrice: toBigNumberStr(params.triggerPrice || "0", POST_ORDER_BASE),
+        quantity: toBigNumberStr(params.quantity, POST_ORDER_BASE),
+        leverage: toBigNumberStr(params.leverage, POST_ORDER_BASE),
         side: params.side,
         reduceOnly: params.reduceOnly,
         salt: params.salt,
